@@ -14,7 +14,7 @@ import 'package:flutter/foundation.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
-adasd
+
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
