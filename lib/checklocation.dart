@@ -8,6 +8,18 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geocoding/geocoding.dart';
 
+// ====== PALET WARNA (hanya untuk tampilan) ======
+const Color _kNavy = Color(0xFF0B2A6F);
+const Color _kBlue = Color(0xFF1D4ED8);
+const Color _kBlueSoft = Color(0xFF3B82F6);
+const Color _kBlueLight = Color(0xFFEAF1FF);
+const Color _kBg = Color(0xFFF5F8FF);
+const Color _kText = Color(0xFF0F1B3D);
+const Color _kMuted = Color(0xFF6B7A99);
+const Color _kOk = Color(0xFF16A34A);
+const Color _kBad = Color(0xFFDC2626);
+const Color _kWarn = Color(0xFFF59E0B);
+
 class CheckLocationPage extends StatefulWidget {
   final bool isCheckIn; // Parameter untuk membedakan check in atau check out
 
@@ -58,26 +70,15 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
       locationId = prefs.getString("locationid") ?? "";
     });
 
-    print("=== DEBUG USER DATA (CheckLocationPage) ===");
-    print("empid dari SharedPreferences: $employeeId");
-    print("empname: $employeeName");
-    print("nik: $employeeNik");
-    print("locationid: $locationId");
-    print("==========================================");
-
     await loadHomeData();
     await checkLocationAccess();
   }
 
   Future<void> loadHomeData() async {
     try {
-      print("=== LOAD HOME DATA ===");
-      print(
-          "URL: http://localhost:8000/api/new_gethomedata?employeeid=$employeeId");
-
       final response = await http.get(
         Uri.parse(
-            "http://localhost:8000/api/new_gethomedata?employeeid=$employeeId&date=${DateFormat('yyyy-MM-dd').format(DateTime.now())}"),
+            "http://192.168.0.151:8000/api/new_gethomedata?employeeid=$employeeId&date=${DateFormat('yyyy-MM-dd').format(DateTime.now())}"),
       );
 
       if (response.statusCode == 200) {
@@ -90,9 +91,7 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
           });
         }
       }
-    } catch (e) {
-      print("Error loading home data: $e");
-    }
+    } catch (e) {}
   }
 
   Future<void> checkLocationAccess() async {
@@ -159,7 +158,7 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
   }
 
   Future<bool> fetchLocationFromAPI(String locationId) async {
-    final url = "http://localhost:8000/api/getlocationbyid?id=$locationId";
+    final url = "http://192.168.0.151:8000/api/getlocationbyid?id=$locationId";
     try {
       final res = await http.get(Uri.parse(url));
       if (res.statusCode == 200) {
@@ -253,7 +252,6 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
     }
   }
 
-  // Di CheckLocationPage, ubah method _navigateToCameraPage:
   void _navigateToCameraPage() {
     if (!canCheckInOut && widget.isCheckIn) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -264,14 +262,6 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
       );
       return;
     }
-
-    // Debug sebelum kirim data
-    print("=== SENDING TO CAMERA ===");
-    print("employeeId (empid): $employeeId");
-    print("employeeName: $employeeName");
-    print("isCheckIn: ${widget.isCheckIn}");
-    print("==========================");
-
     Navigator.pop(context, {
       'canProceed': true,
       'isCheckIn': widget.isCheckIn,
@@ -284,24 +274,159 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
     });
   }
 
+  // ====== HELPER TAMPILAN ======
+  Color get _statusColor => canCheckInOut ? _kOk : _kBad;
+
+  BoxDecoration _cardDecoration() {
+    return BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: _kBlue.withOpacity(0.08)),
+      boxShadow: [
+        BoxShadow(
+          color: _kBlue.withOpacity(0.10),
+          blurRadius: 24,
+          offset: const Offset(0, 8),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionTitle(IconData icon, String title) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: _kBlueLight,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: _kBlue, size: 18),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: _kNavy,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _mapBadge({
+    required Widget child,
+    Color? color,
+    EdgeInsets padding =
+        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    double radius = 12,
+  }) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: color ?? Colors.white.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: [
+          BoxShadow(
+            color: _kNavy.withOpacity(0.18),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildStatusBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [_kNavy, _kBlue, _kBlueSoft],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: _kBlue.withOpacity(0.35),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+            child: Icon(
+              canCheckInOut ? Icons.check_circle : Icons.cancel,
+              color: _statusColor,
+              size: 30,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  status,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                if (distanceMeter != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      "Jarak: ${distanceMeter!.toStringAsFixed(2)} meter",
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: Colors.white.withOpacity(0.85),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMapPreview() {
     if (officeLat == null || officeLong == null || currentPosition == null) {
       return Container(
         height: 250,
         margin: const EdgeInsets.only(bottom: 16),
-        decoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: _cardDecoration(),
         child: const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.map, size: 50, color: Colors.grey),
+              Icon(Icons.map_rounded, size: 50, color: _kBlueSoft),
               SizedBox(height: 10),
               Text(
                 "Memuat peta...",
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(color: _kMuted),
               ),
             ],
           ),
@@ -342,20 +467,21 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
         InteractiveFlag.pinchZoom; // Biarkan pinch zoom tapi dengan batasan
 
     return Container(
-      height: 280,
+      height: 300,
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white, width: 3),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            spreadRadius: 1,
+            color: _kBlue.withOpacity(0.18),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(19),
         child: Stack(
           children: [
             FlutterMap(
@@ -372,7 +498,7 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
                   urlTemplate: tileUrl,
                   userAgentPackageName: 'com.yourcompany.yourapp',
                   tileProvider: NetworkTileProvider(),
-                  backgroundColor: Colors.blue,
+                  backgroundColor: _kBlueLight,
                 ),
                 // Lingkaran radius FIXED (tidak berubah ukuran)
                 MarkerLayer(
@@ -387,11 +513,9 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
                           height: circleRadiusInPixels * 2,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: canCheckInOut
-                                ? Colors.green.withOpacity(0.15)
-                                : Colors.red.withOpacity(0.15),
+                            color: _statusColor.withOpacity(0.15),
                             border: Border.all(
-                              color: canCheckInOut ? Colors.green : Colors.red,
+                              color: _statusColor,
                               width: 2,
                             ),
                           ),
@@ -405,8 +529,8 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
                   polylines: [
                     Polyline(
                       points: [officePoint, userPoint],
-                      color: canCheckInOut ? Colors.green : Colors.red,
-                      strokeWidth: 2.0,
+                      color: _statusColor,
+                      strokeWidth: 3.0,
                     ),
                   ],
                 ),
@@ -415,18 +539,22 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
                   markers: [
                     Marker(
                       point: officePoint,
-                      width: 40,
-                      height: 40,
+                      width: 44,
+                      height: 44,
                       builder: (ctx) => Container(
-                        padding: const EdgeInsets.all(6),
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.blue,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.white, width: 2),
+                          gradient: const LinearGradient(
+                            colors: [_kNavy, _kBlue],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2.5),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.3),
-                              blurRadius: 5,
+                              blurRadius: 6,
                             ),
                           ],
                         ),
@@ -439,22 +567,22 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
                     ),
                     Marker(
                       point: userPoint,
-                      width: 40,
-                      height: 40,
+                      width: 44,
+                      height: 44,
                       builder: (ctx) => Container(
-                        padding: const EdgeInsets.all(6),
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: canCheckInOut ? Colors.green : Colors.red,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.white, width: 2),
+                          color: _statusColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2.5),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.3),
-                              blurRadius: 5,
+                              blurRadius: 6,
                             ),
                           ],
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.person_pin_circle,
                           color: Colors.white,
                           size: 20,
@@ -467,41 +595,34 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
             ),
             // Informasi radius di pojok
             Positioned(
-              top: 10,
-              left: 10,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Text(
-                  "Radius: ${actualRadius.toStringAsFixed(0)} m",
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
+              top: 12,
+              left: 12,
+              child: _mapBadge(
+                color: _kNavy.withOpacity(0.9),
+                radius: 20,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.radar, color: Colors.white, size: 13),
+                    const SizedBox(width: 5),
+                    Text(
+                      "Radius: ${actualRadius.toStringAsFixed(0)} m",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
             Positioned(
-              top: 10,
-              right: 10,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: canCheckInOut ? Colors.green : Colors.red,
-                  borderRadius: BorderRadius.circular(15),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 5,
-                    ),
-                  ],
-                ),
+              top: 12,
+              right: 12,
+              child: _mapBadge(
+                color: _statusColor,
+                radius: 20,
                 child: Text(
                   canCheckInOut ? "✓ DALAM" : "✗ LUAR",
                   style: const TextStyle(
@@ -513,70 +634,48 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
               ),
             ),
             Positioned(
-              bottom: 10,
-              left: 10,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 3,
-                    ),
-                  ],
-                ),
+              bottom: 12,
+              left: 12,
+              child: _mapBadge(
                 child: Row(
                   children: [
                     Container(
                       width: 12,
                       height: 12,
-                      decoration: BoxDecoration(
-                        color: Colors.blue,
-                        borderRadius: BorderRadius.circular(6),
+                      decoration: const BoxDecoration(
+                        color: _kBlue,
+                        shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 6),
-                    const Text("Kantor", style: TextStyle(fontSize: 10)),
+                    const Text("Kantor",
+                        style: TextStyle(fontSize: 10, color: _kText)),
                     const SizedBox(width: 10),
                     Container(
                       width: 12,
                       height: 12,
                       decoration: BoxDecoration(
-                        color: canCheckInOut ? Colors.green : Colors.red,
-                        borderRadius: BorderRadius.circular(6),
+                        color: _statusColor,
+                        shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 6),
-                    const Text("Anda", style: TextStyle(fontSize: 10)),
+                    const Text("Anda",
+                        style: TextStyle(fontSize: 10, color: _kText)),
                   ],
                 ),
               ),
             ),
             Positioned(
-              bottom: 10,
-              right: 10,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 3,
-                    ),
-                  ],
-                ),
+              bottom: 12,
+              right: 12,
+              child: _mapBadge(
                 child: Text(
                   "${distanceMeter?.toStringAsFixed(2) ?? '0.00'} m",
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: canCheckInOut ? Colors.green : Colors.red,
+                    color: _statusColor,
                   ),
                 ),
               ),
@@ -589,74 +688,72 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
 
   Widget _buildLocationDetails() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-          )
-        ],
-      ),
+      decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "📍 Detail Lokasi",
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Icon(Icons.business, color: Colors.blue, size: 16),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  locationData?["locationname"] ?? "Head Office",
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (locationData?["address"] != null &&
-              locationData!["address"].toString().isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Icon(Icons.location_on, color: Colors.grey[600], size: 14),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      locationData!["address"].toString(),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          _sectionTitle(Icons.location_city_rounded, "Detail Lokasi"),
+          const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: canCheckInOut
-                  ? Colors.green.withOpacity(0.05)
-                  : Colors.red.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(8),
+              color: _kBlueLight,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.business, color: _kBlue, size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        locationData?["locationname"] ?? "Head Office",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: _kNavy,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (locationData?["address"] != null &&
+                    locationData!["address"].toString().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.location_on, color: _kMuted, size: 16),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            locationData!["address"].toString(),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: _kMuted,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: _statusColor.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: canCheckInOut ? Colors.green : Colors.red,
+                color: _statusColor.withOpacity(0.5),
                 width: 1,
               ),
             ),
@@ -670,27 +767,27 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
                       children: [
                         Icon(
                           canCheckInOut ? Icons.check_circle : Icons.cancel,
-                          color: canCheckInOut ? Colors.green : Colors.red,
-                          size: 16,
+                          color: _statusColor,
+                          size: 18,
                         ),
                         const SizedBox(width: 8),
                         Text(
                           canCheckInOut ? "Dalam Radius" : "Luar Radius",
                           style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: canCheckInOut ? Colors.green : Colors.red,
+                            fontWeight: FontWeight.w700,
+                            color: _statusColor,
                           ),
                         ),
                       ],
                     ),
                     if (distanceMeter != null)
                       Padding(
-                        padding: const EdgeInsets.only(top: 4, left: 24),
+                        padding: const EdgeInsets.only(top: 4, left: 26),
                         child: Text(
                           "Jarak: ${distanceMeter!.toStringAsFixed(2)} m",
                           style: const TextStyle(
                             fontSize: 12,
-                            color: Colors.grey,
+                            color: _kMuted,
                           ),
                         ),
                       ),
@@ -700,18 +797,18 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     const Text(
-                      "Radius:",
+                      "Radius",
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.grey,
+                        color: _kMuted,
                       ),
                     ),
                     Text(
                       "${locationData?["radius"]?.toString() ?? '100'} m",
                       style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: _kBlue,
                       ),
                     ),
                   ],
@@ -722,22 +819,24 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
           if (!canCheckInOut && distanceMeter != null && locationData != null)
             Container(
               margin: const EdgeInsets.only(top: 12),
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.orange[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange[200]!),
+                color: _kWarn.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _kWarn.withOpacity(0.4)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning, color: Colors.orange[700], size: 16),
+                  Icon(Icons.warning_amber_rounded,
+                      color: Colors.orange[700], size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       "${(distanceMeter! - double.parse(locationData!["radius"]?.toString() ?? '100')).toStringAsFixed(2)} m di luar radius",
                       style: TextStyle(
-                        color: Colors.orange[800],
+                        color: Colors.orange[900],
                         fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -752,15 +851,22 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
   Widget _buildCoordinateItem(
       String title, String coordinate, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.25)),
       ),
       child: Row(
         children: [
-          Icon(icon, color: color, size: 16),
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 16),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -768,9 +874,10 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
               children: [
                 Text(
                   title,
-                  style: TextStyle(
-                    color: Colors.grey[700],
+                  style: const TextStyle(
+                    color: _kMuted,
                     fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -779,7 +886,7 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
                   style: TextStyle(
                     color: color,
                     fontWeight: FontWeight.bold,
-                    fontSize: 10,
+                    fontSize: 10.5,
                     fontFamily: 'monospace',
                   ),
                 ),
@@ -791,15 +898,88 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
     );
   }
 
+  Widget _buildActionButton({
+    required String label,
+    required IconData icon,
+    required List<Color> colors,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: colors.last.withOpacity(0.35),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: _navigateToCameraPage,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+        backgroundColor: _kBg,
         appBar: AppBar(
-          title: Text(widget.isCheckIn ? "Check In" : "Check Out"),
-          backgroundColor: Colors.blue[700],
+          title: Text(
+            widget.isCheckIn ? "Check In" : "Check Out",
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+            ),
+          ),
+          centerTitle: true,
+          elevation: 0,
+          iconTheme: const IconThemeData(color: Colors.white),
+          backgroundColor: _kNavy,
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [_kNavy, _kBlue],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+            ),
+          ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.white),
+              icon: const Icon(Icons.refresh_rounded, color: Colors.white),
               onPressed: () async {
                 await loadHomeData();
                 await checkLocationAccess();
@@ -808,89 +988,25 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
           ],
         ),
         body: isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(
+                child: CircularProgressIndicator(color: _kBlue),
+              )
             : SingleChildScrollView(
-                padding: const EdgeInsets.all(12.0),
+                padding: const EdgeInsets.all(16.0),
                 child: Column(children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 12, horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: canCheckInOut
-                          ? Colors.green.withOpacity(0.1)
-                          : Colors.red.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: canCheckInOut ? Colors.green : Colors.red,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          canCheckInOut ? Icons.check_circle : Icons.cancel,
-                          color: canCheckInOut ? Colors.green : Colors.red,
-                          size: 28,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                status,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color:
-                                      canCheckInOut ? Colors.green : Colors.red,
-                                ),
-                              ),
-                              if (distanceMeter != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: Text(
-                                    "Jarak: ${distanceMeter!.toStringAsFixed(2)} meter",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[700],
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _buildStatusBanner(),
                   const SizedBox(height: 16),
                   _buildMapPreview(),
                   _buildLocationDetails(),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(18),
                     margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 5,
-                        )
-                      ],
-                    ),
+                    decoration: _cardDecoration(),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          "📍 Koordinat",
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
+                        _sectionTitle(Icons.my_location_rounded, "Koordinat"),
+                        const SizedBox(height: 14),
                         Row(
                           children: [
                             Expanded(
@@ -898,35 +1014,35 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
                                 "Kantor",
                                 "${officeLat?.toStringAsFixed(6)}\n${officeLong?.toStringAsFixed(6)}",
                                 Icons.business,
-                                Colors.blue,
+                                _kBlue,
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 10),
                             Expanded(
                               child: _buildCoordinateItem(
                                 "Anda",
                                 "${currentPosition?.latitude.toStringAsFixed(6)}\n${currentPosition?.longitude.toStringAsFixed(6)}",
                                 Icons.person_pin_circle,
-                                canCheckInOut ? Colors.green : Colors.red,
+                                _statusColor,
                               ),
                             ),
                           ],
                         ),
                         if (currentAddress != null)
                           Container(
-                            margin: const EdgeInsets.only(top: 10),
+                            margin: const EdgeInsets.only(top: 12),
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.blue.withOpacity(0.05),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                  color: Colors.blue.withOpacity(0.3)),
+                              color: _kBlueLight,
+                              borderRadius: BorderRadius.circular(14),
+                              border:
+                                  Border.all(color: _kBlue.withOpacity(0.2)),
                             ),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Icon(Icons.place,
-                                    color: Colors.blue, size: 18),
+                                    color: _kBlue, size: 18),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
@@ -934,6 +1050,7 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
                                     style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w500,
+                                      color: _kText,
                                       height: 1.4,
                                     ),
                                   ),
@@ -943,83 +1060,27 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
                           ),
 
                         // Tombol untuk lanjut ke camera
-                        Container(
-                          width: double.infinity,
-                          margin: const EdgeInsets.only(bottom: 12),
-                          child: ElevatedButton(
-                            onPressed: _navigateToCameraPage,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: widget.isCheckIn
-                                  ? Colors.green
-                                  : Colors.orange,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              elevation: 2,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  widget.isCheckIn ? Icons.login : Icons.logout,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  widget.isCheckIn
-                                      ? "LANJUT KE CHECK IN"
-                                      : "LANJUT KE CHECK OUT",
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                        _buildActionButton(
+                          label: widget.isCheckIn
+                              ? "LANJUT KE CHECK IN"
+                              : "LANJUT KE CHECK OUT",
+                          icon: widget.isCheckIn ? Icons.login : Icons.logout,
+                          colors: widget.isCheckIn
+                              ? const [_kBlue, _kBlueSoft]
+                              : const [_kNavy, _kBlue],
                         ),
 
                         // Tombol khusus untuk Check Out jika di luar radius
                         if (!canCheckInOut &&
                             !widget.isCheckIn &&
                             hasCheckedInToday)
-                          Container(
-                            width: double.infinity,
-                            margin: const EdgeInsets.only(bottom: 12),
-                            child: ElevatedButton(
-                              onPressed: _navigateToCameraPage,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                elevation: 2,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.logout,
-                                      color: Colors.white, size: 20),
-                                  const SizedBox(width: 8),
-                                  const Text(
-                                    "CHECK OUT (DI LUAR RADIUS)",
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          _buildActionButton(
+                            label: "CHECK OUT (DI LUAR RADIUS)",
+                            icon: Icons.logout,
+                            colors: const [Color(0xFFB91C1C), _kBad],
                           ),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 6),
                       ],
                     ),
                   ),
