@@ -11,7 +11,7 @@ import 'package:flutter/foundation.dart';
 //  Palette  : Deep Blue · Gold accent · White/Cream
 //  Motion   : Staggered entrance · Gold focus ring · Button press scale
 // ─────────────────────────────────────────────────────────────────────────────
-asdasdas
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
