@@ -109,7 +109,7 @@ class _HomePageState extends State<HomePage> {
     try {
       String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
       final url =
-          "http://192.168.0.151:8000/api/new_gethomedata?employeeid=$empId&date=$today";
+          "http://localhost:8000/api/new_gethomedata?employeeid=$empId&date=$today";
 
       final response = await http.get(Uri.parse(url));
 
@@ -131,7 +131,7 @@ class _HomePageState extends State<HomePage> {
     String empId = prefs.getString('empid') ?? "";
     String empName = prefs.getString('empname') ?? "";
     DateTime now = DateTime.now();
-    final url = Uri.parse("http://192.168.0.151:8000/api/new_clockin");
+    final url = Uri.parse("http://localhost:8000/api/new_clockin");
     final body = {
       "id": "",
       "employeeid": empId,
@@ -157,7 +157,7 @@ class _HomePageState extends State<HomePage> {
     String empId = prefs.getString('empid') ?? "";
     String empName = prefs.getString('empname') ?? "";
     DateTime now = DateTime.now();
-    final url = Uri.parse("http://192.168.0.151:8000/api/new_clockout");
+    final url = Uri.parse("http://localhost:8000/api/new_clockout");
     final body = {
       "id": "",
       "employeeid": empId,

@@ -78,7 +78,7 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
     try {
       final response = await http.get(
         Uri.parse(
-            "http://192.168.0.151:8000/api/new_gethomedata?employeeid=$employeeId&date=${DateFormat('yyyy-MM-dd').format(DateTime.now())}"),
+            "http://localhost:8000/api/new_gethomedata?employeeid=$employeeId&date=${DateFormat('yyyy-MM-dd').format(DateTime.now())}"),
       );
 
       if (response.statusCode == 200) {
@@ -158,7 +158,7 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
   }
 
   Future<bool> fetchLocationFromAPI(String locationId) async {
-    final url = "http://192.168.0.151:8000/api/getlocationbyid?id=$locationId";
+    final url = "http://localhost:8000/api/getlocationbyid?id=$locationId";
     try {
       final res = await http.get(Uri.parse(url));
       if (res.statusCode == 200) {

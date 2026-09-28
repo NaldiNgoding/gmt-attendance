@@ -71,7 +71,7 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
       String endStr = DateFormat('yyyy-MM-dd').format(endDate!);
 
       final response = await http.get(
-        Uri.parse('http://192.168.0.151:8000/api/new_getAttendLogByEmpIdPeriod')
+        Uri.parse('http://localhost:8000/api/new_getAttendLogByEmpIdPeriod')
             .replace(queryParameters: {
           'empid': widget.employeeId,
           'start': startStr,
@@ -739,7 +739,7 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
     };
 
     final activityResponse = await http.get(
-      Uri.parse('http://192.168.0.151:8000/api/getattactbyattenid')
+      Uri.parse('http://localhost:8000/api/getattactbyattenid')
           .replace(queryParameters: {'id': attendanceId}),
     );
 
@@ -770,7 +770,7 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
 
       try {
         final photoResponse = await http.get(
-          Uri.parse('http://192.168.0.151:8000/api/getattendphoto')
+          Uri.parse('http://localhost:8000/api/getattendphoto')
               .replace(queryParameters: {'filename': photoFilename}),
         );
 

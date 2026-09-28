@@ -166,7 +166,7 @@ class _LoginPageState extends State<LoginPage>
 
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text.trim();
-    final url = Uri.parse("http://192.168.0.151:8000/api/mobilelogin");
+    final url = Uri.parse("http://localhost:8000/api/mobilelogin");
 
     try {
       final response = await http.post(
