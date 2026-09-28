@@ -261,7 +261,7 @@ class OvertimeRequest {
 
 // ============ SERVICE ============
 class OvertimeService {
-  static const String baseUrl = 'http://192.168.0.151:8000/api';
+  static const String baseUrl = 'http://localhost:8000/api';
 
   Future<List<AttendanceData>> getAttendanceByEmployeeId(
       String empid, DateTime date) async {
