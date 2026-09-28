@@ -72,6 +72,18 @@ class _HomePageState extends State<HomePage> {
     _updateTime();
   }
 
+  String _formatJam(dynamic value) {
+    if (value == null || value.toString().isEmpty) return '-';
+
+    final jam = value.toString().trim().split(':');
+
+    if (jam.length >= 2) {
+      return '${jam[0]}:${jam[1]}';
+    }
+
+    return value.toString();
+  }
+
   void _updateTime() {
     setState(() {
       _currentTime = DateTime.now();
@@ -439,8 +451,7 @@ class _HomePageState extends State<HomePage> {
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          shiftData?['schedulein'] ??
-                                              '-', // BENAR
+                                          _formatJam(shiftData?['schedulein']),
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 28,
@@ -469,8 +480,7 @@ class _HomePageState extends State<HomePage> {
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          shiftData?['scheduleout'] ??
-                                              '-', // BENAR
+                                          _formatJam(shiftData?['scheduleout']),
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 28,
