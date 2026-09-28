@@ -129,7 +129,7 @@ class _CameraPageState extends State<CameraPage> {
           : "Check In di luar area lokasi - memerlukan persetujuan";
 
       final response = await http.post(
-        Uri.parse("http://localhost:8000/api/new_clockin"),
+        Uri.parse("http://192.168.0.151:8000/api/new_clockin"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "id": widget.attendanceId,
@@ -228,7 +228,7 @@ class _CameraPageState extends State<CameraPage> {
           : "Check Out di luar area lokasi - memerlukan persetujuan";
 
       final response = await http.post(
-        Uri.parse("http://localhost:8000/api/new_clockout"),
+        Uri.parse("http://192.168.0.151:8000/api/new_clockout"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "id": widget.attendanceId,
