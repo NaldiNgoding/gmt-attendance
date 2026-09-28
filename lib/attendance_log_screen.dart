@@ -5,7 +5,6 @@ import 'dart:convert';
 import 'attendance_home.dart';
 
 
-aaaa
 
 class AttendanceLogScreen extends StatefulWidget {
   final String employeeId;
