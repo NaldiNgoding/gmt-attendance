@@ -506,22 +506,6 @@ class _LoginPageState extends State<LoginPage>
             onPressed: () => setState(() => _obscure = !_obscure),
           ),
         ),
-        const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerRight,
-          child: GestureDetector(
-            onTap: () {},
-            child: Text(
-              'Lupa password?',
-              style: TextStyle(
-                fontSize: 12,
-                fontFamily: 'Poppins',
-                color: _gold.withOpacity(0.9),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -746,24 +730,27 @@ class _BlueButtonState extends State<_BlueButton> {
                 RepaintBoundary(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: AnimatedBuilder(
-                      animation: widget.shimmer,
-                      builder: (context, _) => Transform.translate(
-                        offset: Offset(
-                          (widget.shimmer.value * 1.6 - 0.3) *
-                              MediaQuery.of(context).size.width,
-                          0,
-                        ),
-                        child: Container(
-                          width: 60,
-                          height: 58,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.white.withOpacity(0.0),
-                                Colors.white.withOpacity(0.25),
-                                Colors.white.withOpacity(0.0),
-                              ],
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: AnimatedBuilder(
+                        animation: widget.shimmer,
+                        builder: (context, _) => Transform.translate(
+                          offset: Offset(
+                            (widget.shimmer.value * 1.6 - 0.3) *
+                                MediaQuery.of(context).size.width,
+                            0,
+                          ),
+                          child: Container(
+                            width: 60,
+                            height: 58,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.white.withOpacity(0.0),
+                                  Colors.white.withOpacity(0.25),
+                                  Colors.white.withOpacity(0.0),
+                                ],
+                              ),
                             ),
                           ),
                         ),
