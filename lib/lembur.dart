@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter/cupertino.dart';
 
 // ============ MODEL ============
 class AttendanceData {
@@ -398,6 +399,8 @@ extension OvertimeTypeExtension on OvertimeType {
 class _AppColors {
   static const Color primary = Color(0xFF4F6EF7);
   static const Color primaryLight = Color(0xFFEEF1FF);
+  static const Color royalNavy = Color(0xFF1E88E5);
+  static const Color royalNavyDark = Color(0xFF0D47A1);
   static const Color accent = Color(0xFF7C3AED);
   static const Color surface = Color(0xFFF8F9FF);
   static const Color card = Colors.white;
@@ -409,6 +412,7 @@ class _AppColors {
   static const Color error = Color(0xFFEF4444);
   static const Color errorLight = Color(0xFFFEF2F2);
   static const Color warning = Color(0xFFF59E0B);
+  // ignore: unused_field
   static const Color warningLight = Color(0xFFFFFBEB);
   static const Color divider = Color(0xFFE5E7EB);
   static const Color orange = Color(0xFFF97316);
@@ -441,7 +445,6 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
   // State
   List<OvertimeHistory> _historyList = [];
   bool _isLoadingHistory = true;
-  bool _showForm = false;
   int _selectedMonth = DateTime.now().month;
   int _selectedYear = DateTime.now().year;
 
@@ -449,12 +452,18 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
   final _formKey = GlobalKey<FormState>();
   DateTime _selectedDate = DateTime.now();
   String _reason = '';
-  List<AttendanceData> _attendanceList = [];
   AttendanceData? _selectedAttendance;
+  List<AttendanceData> _attendanceList = [];
   bool _isLoadingAttendance = false;
   bool _isSubmitting = false;
   bool _isLocaleInitialized = false;
   OvertimeType? _selectedOvertimeType;
+
+  bool get _canApplyOvertime {
+    return _selectedAttendance != null &&
+        _selectedAttendance!.hasCheckin &&
+        _selectedAttendance!.hasCheckout;
+  }
 
   // File upload
   final List<Map<String, String>> _selectedFiles = [];
@@ -479,7 +488,6 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
   final TextEditingController _noteController = TextEditingController();
 
   late AnimationController _fadeController;
-  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
@@ -487,10 +495,6 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 400),
       vsync: this,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeOut,
     );
     _fadeController.forward();
     _initializeLocale();
@@ -533,6 +537,187 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
     });
   }
 
+  Future<void> _openOvertimeForm() async {
+    // Ambil data absensi terlebih dahulu.
+    // Dengan begitu saat bottom sheet terbuka, data sudah tersedia.
+    await _loadAttendanceData();
+
+    if (!mounted) return;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.45),
+      builder: (context) {
+        return _buildOvertimeBottomSheet();
+      },
+    );
+  }
+
+  Widget _buildOvertimeBottomSheet() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: _AppColors.surface,
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(28),
+        ),
+      ),
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.88,
+        minChildSize: 0.55,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) {
+          return Column(
+            children: [
+              // ==========================================================
+              // DRAG HANDLE
+              // ==========================================================
+              Padding(
+                padding: const EdgeInsets.only(
+                  top: 10,
+                  bottom: 4,
+                ),
+                child: Container(
+                  width: 42,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: _AppColors.textMuted.withOpacity(0.30),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+
+              // ==========================================================
+              // HEADER
+              // ==========================================================
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  20,
+                  8,
+                  12,
+                  12,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            _AppColors.royalNavy,
+                            _AppColors.royalNavyDark,
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                      child: const Icon(
+                        Icons.more_time_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Ajukan Lembur',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: _AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () {
+                        _resetFormState();
+                        Navigator.pop(context);
+                      },
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: _AppColors.textSecondary,
+                      ),
+                      tooltip: 'Tutup',
+                    ),
+                  ],
+                ),
+              ),
+
+              const Divider(
+                height: 1,
+                color: _AppColors.divider,
+              ),
+
+              // ==========================================================
+              // FORM CONTENT
+              // ==========================================================
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    16,
+                    16,
+                    MediaQuery.of(context).viewInsets.bottom + 24,
+                  ),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildDateSelector(),
+                        const SizedBox(height: 16),
+                        _buildAttendanceStatus(),
+                        const SizedBox(height: 16),
+                        _buildOvertimeTypeSelector(),
+                        const SizedBox(height: 16),
+                        if (_selectedOvertimeType == OvertimeType.beforeWork)
+                          _buildOvertimeDurationCard(
+                            type: OvertimeType.beforeWork,
+                            durationHourController: _ovtBeforeHourController,
+                            durationMinuteController:
+                                _ovtBeforeMinuteController,
+                            breakHourController: _brkBeforeHourController,
+                            breakMinuteController: _brkBeforeMinuteController,
+                          ),
+                        if (_selectedOvertimeType == OvertimeType.afterWork)
+                          _buildOvertimeDurationCard(
+                            type: OvertimeType.afterWork,
+                            durationHourController: _ovtAfterHourController,
+                            durationMinuteController: _ovtAfterMinuteController,
+                            breakHourController: _brkAfterHourController,
+                            breakMinuteController: _brkAfterMinuteController,
+                          ),
+                        if (_selectedOvertimeType != null) ...[
+                          const SizedBox(height: 16),
+                          _buildReasonField(),
+                          const SizedBox(height: 16),
+                          _buildFileUploadSection(),
+                          const SizedBox(height: 16),
+                          _buildNoteField(),
+                        ],
+                        const SizedBox(height: 28),
+                        _buildSubmitButton(),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _changeMonth(int delta) async {
     int newMonth = _selectedMonth + delta;
     int newYear = _selectedYear;
@@ -554,45 +739,87 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
   }
 
   Future<void> _loadAttendanceData() async {
+    if (!mounted) return;
+
     setState(() {
       _isLoadingAttendance = true;
+      _selectedAttendance = null;
+      _selectedOvertimeType = null;
     });
 
     try {
-      final attendanceList =
-          await _service.getAttendanceByEmployeeId(widget.empid, _selectedDate);
+      final attendanceList = await _service.getAttendanceByEmployeeId(
+        widget.empid,
+        _selectedDate,
+      );
+
+      AttendanceData? selectedAttendance;
+
+      for (final attendance in attendanceList) {
+        if (attendance.date.year == _selectedDate.year &&
+            attendance.date.month == _selectedDate.month &&
+            attendance.date.day == _selectedDate.day) {
+          selectedAttendance = attendance;
+          break;
+        }
+      }
+
+      if (!mounted) return;
+
       setState(() {
         _attendanceList = attendanceList;
-        _selectedAttendance = attendanceList.firstWhere(
-          (att) =>
-              att.date.year == _selectedDate.year &&
-              att.date.month == _selectedDate.month &&
-              att.date.day == _selectedDate.day,
-        );
+        _selectedAttendance = selectedAttendance;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _attendanceList = [];
+        _selectedAttendance = null;
+        _selectedOvertimeType = null;
       });
 
-      if (_selectedAttendance == null) {
-        _showSnackBar('Belum ada data absensi pada tanggal ini', isError: true);
-      } else if (!_selectedAttendance!.hasCheckin ||
-          !_selectedAttendance!.hasCheckout) {
-        _showSnackBar('Belum melakukan checkin/checkout pada tanggal ini',
-            isError: true);
-      }
-    } catch (e) {
-      _showSnackBar('Gagal mengambil data absensi: $e', isError: true);
+      _showSnackBar(
+        'Gagal mengambil data absensi: $e',
+        isError: true,
+      );
     } finally {
+      if (!mounted) return;
+
       setState(() {
         _isLoadingAttendance = false;
       });
     }
   }
 
-  Future<void> _selectDate() async {
+  Future<void> _selectDate({
+    void Function(void Function())? setModalState,
+  }) async {
+    final DateTime today = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
+    // User hanya boleh memilih hari ini sampai maksimal 3 hari sebelumnya.
+    final DateTime minDate = today.subtract(
+      const Duration(days: 3),
+    );
+    // Pastikan tanggal awal kalender berada di dalam range.
+    DateTime initialDate = _selectedDate;
+    if (initialDate.isBefore(minDate) || initialDate.isAfter(today)) {
+      initialDate = today;
+    }
+
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2024, 1),
-      lastDate: DateTime.now(),
+      initialDate: initialDate,
+      firstDate: minDate,
+      lastDate: today,
+      // Semua tanggal dalam range H-3 sampai hari ini boleh dipilih.
+      selectableDayPredicate: (DateTime day) {
+        return !day.isBefore(minDate) && !day.isAfter(today);
+      },
+
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -602,9 +829,80 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
               surface: Colors.white,
               onSurface: _AppColors.textPrimary,
             ),
-            dialogBackgroundColor: Colors.white,
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(foregroundColor: _AppColors.primary),
+            datePickerTheme: DatePickerThemeData(
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
+
+              headerBackgroundColor: _AppColors.primary,
+              headerForegroundColor: Colors.white,
+
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              // Selected date → lingkaran biru
+              dayBackgroundColor: WidgetStateProperty.resolveWith<Color?>(
+                (states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return _AppColors.primary;
+                  }
+                  return Colors.transparent;
+                },
+              ),
+              // Selected date → teks putih
+              // Hari ini yang belum dipilih → teks normal
+              dayForegroundColor: WidgetStateProperty.resolveWith<Color?>(
+                (states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return Colors.white;
+                  }
+                  if (states.contains(WidgetState.disabled)) {
+                    return Colors.grey.shade300;
+                  }
+                  return _AppColors.textPrimary;
+                },
+              ),
+              // Bentuk tanggal
+              dayShape: WidgetStateProperty.resolveWith<OutlinedBorder?>(
+                (states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(50),
+                    );
+                  }
+                  return null;
+                },
+              ),
+              // Hari ini tidak mempunyai border khusus
+              todayBackgroundColor: WidgetStateProperty.resolveWith<Color?>(
+                (states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return _AppColors.primary;
+                  }
+                  return Colors.transparent;
+                },
+              ),
+              todayForegroundColor: WidgetStateProperty.resolveWith<Color?>(
+                (states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return Colors.white;
+                  }
+                  return _AppColors.textPrimary;
+                },
+              ),
+              todayBorder: BorderSide.none,
+              cancelButtonStyle: TextButton.styleFrom(
+                foregroundColor: _AppColors.textSecondary,
+                textStyle: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+
+              confirmButtonStyle: TextButton.styleFrom(
+                foregroundColor: _AppColors.primary,
+                textStyle: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
           child: child!,
@@ -612,7 +910,7 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
       },
     );
 
-    if (picked != null && picked != _selectedDate) {
+    if (picked != null) {
       setState(() {
         _selectedDate = picked;
         _selectedOvertimeType = null;
@@ -628,7 +926,11 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
         _brkAfterMinuteController.clear();
         _noteController.clear();
       });
+      // Rebuild bottom sheet langsung setelah tanggal berubah.
+      setModalState?.call(() {});
       await _loadAttendanceData();
+      // Rebuild lagi setelah data absensi selesai dimuat.
+      setModalState?.call(() {});
     }
   }
 
@@ -647,6 +949,15 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
     _ovtAfterMinuteController.clear();
     _brkAfterHourController.clear();
     _brkAfterMinuteController.clear();
+  }
+
+  void _resetFormState() {
+    _selectedFiles.clear();
+    _resetOvertimeFields();
+    _reason = '';
+    _noteController.clear();
+    _selectedOvertimeType = null;
+    _selectedAttendance = null;
   }
 
   Future<void> _pickImage() async {
@@ -800,13 +1111,13 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
           }
           _showSnackBar('Pengajuan lembur berhasil dikirim');
           setState(() {
-            _showForm = false;
             _selectedFiles.clear();
             _resetOvertimeFields();
             _reason = '';
             _noteController.clear();
             _selectedOvertimeType = null;
           });
+          Navigator.of(context).pop();
           await _loadHistory();
         } else {
           _showSnackBar(result['message'] ?? 'Gagal mengirim pengajuan',
@@ -886,26 +1197,46 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
       child: Scaffold(
         backgroundColor: _AppColors.surface,
         appBar: AppBar(
-          title: const Text('Riwayat Lembur'),
+          title: const Text(
+            'Riwayat Lembur',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.2,
+            ),
+          ),
+          centerTitle: true,
+          iconTheme: const IconThemeData(
+            color: Colors.white,
+          ),
+          foregroundColor: Colors.white,
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  _AppColors.royalNavyDark,
+                  _AppColors.royalNavy,
+                ],
+              ),
+            ),
+          ),
           backgroundColor: Colors.transparent,
           elevation: 0,
-          foregroundColor: _AppColors.textPrimary,
-          centerTitle: true,
           actions: [
-            if (!_showForm)
-              IconButton(
-                onPressed: () {
-                  setState(() {
-                    _showForm = true;
-                    _loadAttendanceData();
-                  });
-                },
-                icon: const Icon(Icons.add_rounded, color: _AppColors.primary),
-                tooltip: 'Ajukan Lembur',
+            IconButton(
+              onPressed: _openOvertimeForm,
+              icon: const Icon(
+                Icons.add_rounded,
+                color: Colors.white,
               ),
+              tooltip: 'Ajukan Lembur',
+            ),
           ],
         ),
-        body: _showForm ? _buildFormView() : _buildHistoryView(),
+        body: _buildHistoryView(),
       ),
     );
   }
@@ -930,30 +1261,102 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
         Column(
           children: [
             // Month selector
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.95),
-                borderRadius:
-                    const BorderRadius.vertical(bottom: Radius.circular(16)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                16,
+                10,
+                16,
+                8,
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  IconButton(
-                    onPressed: () => _changeMonth(-1),
-                    icon: const Icon(Icons.chevron_left_rounded),
+              child: Container(
+                height: 54,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _AppColors.divider,
+                    width: 1,
                   ),
-                  Text(
-                    '${DateFormat('MMMM', 'id_ID').format(DateTime(_selectedYear, _selectedMonth))} $_selectedYear',
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  IconButton(
-                    onPressed: () => _changeMonth(1),
-                    icon: const Icon(Icons.chevron_right_rounded),
-                  ),
-                ],
+                  boxShadow: [
+                    BoxShadow(
+                      color: _AppColors.royalNavyDark.withOpacity(0.10),
+                      blurRadius: 18,
+                      offset: const Offset(0, 7),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    // Previous month
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _changeMonth(-1),
+                        borderRadius: BorderRadius.circular(15),
+                        child: Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: _AppColors.royalNavy.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          child: const Icon(
+                            Icons.chevron_left_rounded,
+                            color: _AppColors.royalNavyDark,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Month + year
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          '${DateFormat(
+                            'MMMM',
+                            'id_ID',
+                          ).format(
+                            DateTime(
+                              _selectedYear,
+                              _selectedMonth,
+                            ),
+                          )} $_selectedYear',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: _AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Next month
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _changeMonth(1),
+                        borderRadius: BorderRadius.circular(15),
+                        child: Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: _AppColors.royalNavy.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          child: const Icon(
+                            Icons.chevron_right_rounded,
+                            color: _AppColors.royalNavyDark,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             Expanded(
@@ -964,23 +1367,24 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.history_rounded,
-                                  size: 64, color: const Color.fromARGB(255, 0, 0, 0)),
+                              Icon(CupertinoIcons.clock,
+                                  size: 64, color: _AppColors.textPrimary),
                               const SizedBox(height: 16),
                               Text('Belum ada riwayat lembur',
-                                  style: TextStyle(color: const Color.fromARGB(255, 0, 0, 0))),
+                                  style: TextStyle(
+                                      color: _AppColors.textPrimary,
+                                      fontWeight: FontWeight.w600)),
                               const SizedBox(height: 8),
                               ElevatedButton.icon(
-                                onPressed: () {
-                                  setState(() {
-                                    _showForm = true;
-                                    _loadAttendanceData();
-                                  });
-                                },
-                                icon: const Icon(Icons.add_rounded),
-                                label: const Text('Ajukan Lembur'),
+                                onPressed: _openOvertimeForm,
+                                icon: const Icon(
+                                  Icons.add_rounded,
+                                ),
+                                label: const Text(
+                                  'Ajukan Lembur',
+                                ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: _AppColors.primary,
+                                  backgroundColor: _AppColors.royalNavyDark,
                                   foregroundColor: Colors.white,
                                 ),
                               ),
@@ -1183,75 +1587,6 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
     }
   }
 
-  // ============ FORM VIEW (Sama seperti sebelumnya) ============
-  Widget _buildFormView() {
-    return Scaffold(
-      backgroundColor: _AppColors.surface,
-      appBar: AppBar(
-        title: const Text('Ajukan Lembur'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: _AppColors.textPrimary,
-        leading: IconButton(
-          onPressed: () {
-            setState(() {
-              _showForm = false;
-              _selectedFiles.clear();
-              _resetOvertimeFields();
-              _reason = '';
-              _noteController.clear();
-              _selectedOvertimeType = null;
-            });
-          },
-          icon: const Icon(Icons.arrow_back_rounded),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildDateSelector(),
-              const SizedBox(height: 16),
-              _buildAttendanceStatus(),
-              const SizedBox(height: 16),
-              _buildOvertimeTypeSelector(),
-              const SizedBox(height: 16),
-              if (_selectedOvertimeType == OvertimeType.beforeWork)
-                _buildOvertimeDurationCard(
-                  type: OvertimeType.beforeWork,
-                  durationHourController: _ovtBeforeHourController,
-                  durationMinuteController: _ovtBeforeMinuteController,
-                  breakHourController: _brkBeforeHourController,
-                  breakMinuteController: _brkBeforeMinuteController,
-                ),
-              if (_selectedOvertimeType == OvertimeType.afterWork)
-                _buildOvertimeDurationCard(
-                  type: OvertimeType.afterWork,
-                  durationHourController: _ovtAfterHourController,
-                  durationMinuteController: _ovtAfterMinuteController,
-                  breakHourController: _brkAfterHourController,
-                  breakMinuteController: _brkAfterMinuteController,
-                ),
-              if (_selectedOvertimeType != null) ...[
-                const SizedBox(height: 16),
-                _buildReasonField(),
-                const SizedBox(height: 16),
-                _buildFileUploadSection(),
-                const SizedBox(height: 16),
-                _buildNoteField(),
-              ],
-              const SizedBox(height: 28),
-              _buildSubmitButton(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildFileUploadSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1422,18 +1757,23 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                          DateFormat('EEEE, d MMMM yyyy', 'id_ID')
-                              .format(_selectedDate),
-                          style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: _AppColors.textPrimary)),
+                        DateFormat('EEEE,', 'id_ID').format(_selectedDate),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: _AppColors.textPrimary,
+                        ),
+                      ),
                       const SizedBox(height: 2),
                       Text(
-                          DateFormat('MMMM yyyy', 'id_ID')
-                              .format(_selectedDate),
-                          style: const TextStyle(
-                              fontSize: 12, color: _AppColors.textSecondary)),
+                        DateFormat('d MMMM yyyy', 'id_ID')
+                            .format(_selectedDate),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: _AppColors.textPrimary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1462,134 +1802,180 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
       return Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-            color: _AppColors.card, borderRadius: BorderRadius.circular(16)),
+          color: _AppColors.card,
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: const Center(
-            child: SizedBox(
-                height: 28,
-                width: 28,
-                child: CircularProgressIndicator(
-                    color: _AppColors.primary, strokeWidth: 2.5))),
-      );
-    }
-    if (_selectedAttendance == null) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-            color: _AppColors.warningLight,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _AppColors.warning.withOpacity(0.3))),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                  color: _AppColors.warning.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(10)),
-              child: const Icon(Icons.info_outline_rounded,
-                  color: _AppColors.warning, size: 20),
+          child: SizedBox(
+            height: 28,
+            width: 28,
+            child: CircularProgressIndicator(
+              color: _AppColors.primary,
+              strokeWidth: 2.5,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                  'Tidak ada data absensi untuk tanggal ${DateFormat('dd MMMM yyyy', 'id_ID').format(_selectedDate)}',
-                  style: const TextStyle(
-                      color: _AppColors.warning,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500)),
-            ),
-          ],
+          ),
         ),
       );
     }
-    final bool isComplete =
-        _selectedAttendance!.hasCheckin && _selectedAttendance!.hasCheckout;
+
+    final bool hasCheckIn = _selectedAttendance?.hasCheckin ?? false;
+
+    final bool hasCheckOut = _selectedAttendance?.hasCheckout ?? false;
+
+    final bool isComplete = hasCheckIn && hasCheckOut;
+
+    final String checkInTime =
+        hasCheckIn ? _formatTime(_selectedAttendance!.checkin) : '-';
+
+    final String checkOutTime =
+        hasCheckOut ? _formatTime(_selectedAttendance!.checkout) : '-';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionLabel('STATUS ABSENSI'),
         Container(
           decoration: BoxDecoration(
-              color: _AppColors.card, borderRadius: BorderRadius.circular(16)),
+            color: _AppColors.card,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isComplete
+                  ? _AppColors.success.withOpacity(0.15)
+                  : _AppColors.divider,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
           child: Column(
             children: [
+              // =========================================================
+              // STATUS HEADER
+              // =========================================================
               Container(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(
+                  16,
+                  14,
+                  16,
+                  14,
+                ),
                 decoration: BoxDecoration(
-                  color: isComplete
-                      ? _AppColors.successLight
-                      : _AppColors.errorLight,
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(16)),
+                  color:
+                      isComplete ? _AppColors.successLight : _AppColors.surface,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(18),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                        isComplete
-                            ? Icons.check_circle_rounded
-                            : Icons.cancel_rounded,
-                        color:
-                            isComplete ? _AppColors.success : _AppColors.error,
-                        size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                        isComplete
-                            ? 'Absensi lengkap'
-                            : 'Absensi belum lengkap',
-                        style: TextStyle(
-                            color: isComplete
-                                ? _AppColors.success
-                                : _AppColors.error,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600)),
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: _AppColors.textMuted.withOpacity(0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        CupertinoIcons.exclamationmark_circle_fill,
+                        size: 18,
+                        color: _AppColors.royalNavyDark,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ABSENSI HARI INI',
+                            style: TextStyle(
+                              color: _AppColors.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            isComplete
+                                ? 'Anda dapat mengajukan lembur'
+                                : 'Pastikan anda memenuhi absensi hari ini',
+                            style: TextStyle(
+                              color: _AppColors.textMuted,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
+
+              // =========================================================
+              // CLOCK IN / CLOCK OUT
+              // =========================================================
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
                     Expanded(
-                        child: _buildTimeBox(
-                            label: 'Check In',
-                            time: _formatTime(_selectedAttendance!.checkin),
-                            hasData: _selectedAttendance!.hasCheckin)),
+                      child: _buildAttendanceTimeBox(
+                        label: 'Clock In',
+                        time: checkInTime,
+                        hasData: hasCheckIn,
+                        icon: Icons.login_rounded,
+                      ),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
-                        child: _buildTimeBox(
-                            label: 'Check Out',
-                            time: _formatTime(_selectedAttendance!.checkout),
-                            hasData: _selectedAttendance!.hasCheckout)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: _buildTimeBox(
-                            label: 'Shift',
-                            time: _selectedAttendance!.shift.isNotEmpty
-                                ? _selectedAttendance!.shift
-                                : '-',
-                            hasData: _selectedAttendance!.shift.isNotEmpty,
-                            isNeutral: true)),
+                      child: _buildAttendanceTimeBox(
+                        label: 'Clock Out',
+                        time: checkOutTime,
+                        hasData: hasCheckOut,
+                        icon: Icons.logout_rounded,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              if (_selectedAttendance!.shift.isNotEmpty) ...[
-                Divider(height: 1, color: _AppColors.divider),
+
+              // =========================================================
+              // SHIFT
+              // =========================================================
+              if (_selectedAttendance != null)
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.fromLTRB(
+                    16,
+                    0,
+                    16,
+                    16,
+                  ),
                   child: Row(
                     children: [
-                      _buildScheduleChip('Masuk',
-                          _formatTime(_selectedAttendance!.schedulein)),
+                      Expanded(
+                        child: _buildScheduleChip(
+                          'Shift',
+                          _selectedAttendance!.shift.isNotEmpty
+                              ? _selectedAttendance!.shift
+                              : '-',
+                        ),
+                      ),
                       const SizedBox(width: 8),
-                      const Icon(Icons.arrow_forward_rounded,
-                          size: 14, color: _AppColors.textMuted),
-                      const SizedBox(width: 8),
-                      _buildScheduleChip('Pulang',
-                          _formatTime(_selectedAttendance!.scheduleout)),
+                      Expanded(
+                        child: _buildScheduleChip(
+                          'Jam Kerja',
+                          '${_formatTime(_selectedAttendance!.schedulein)} - '
+                              '${_formatTime(_selectedAttendance!.scheduleout)}',
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              ],
             ],
           ),
         ),
@@ -1597,33 +1983,77 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
     );
   }
 
-  Widget _buildTimeBox(
-      {required String label,
-      required String time,
-      required bool hasData,
-      bool isNeutral = false}) {
-    Color textColor = isNeutral
-        ? _AppColors.primary
-        : (hasData ? _AppColors.success : _AppColors.error);
-    Color bgColor = isNeutral
-        ? _AppColors.primaryLight
-        : (hasData ? _AppColors.successLight : _AppColors.errorLight);
+  Widget _buildAttendanceTimeBox({
+    required String label,
+    required String time,
+    required bool hasData,
+    required IconData icon,
+  }) {
+    final Color activeColor = _AppColors.success;
+    final Color inactiveColor = _AppColors.textMuted;
+
+    final Color textColor = hasData ? activeColor : inactiveColor;
+
+    final Color backgroundColor =
+        hasData ? _AppColors.successLight : _AppColors.surface;
+
+    final Color borderColor =
+        hasData ? _AppColors.success.withOpacity(0.18) : _AppColors.divider;
+
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      padding: const EdgeInsets.symmetric(
+        vertical: 13,
+        horizontal: 12,
+      ),
       decoration: BoxDecoration(
-          color: bgColor, borderRadius: BorderRadius.circular(10)),
-      child: Column(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: borderColor,
+        ),
+      ),
+      child: Row(
         children: [
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 10,
-                  color: _AppColors.textMuted,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5)),
-          const SizedBox(height: 4),
-          Text(time,
-              style: TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w700, color: textColor)),
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: hasData
+                  ? activeColor.withOpacity(0.12)
+                  : inactiveColor.withOpacity(0.10),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              size: 16,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: _AppColors.textMuted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  time,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: textColor,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1665,46 +2095,53 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
             Expanded(
               child: _buildOvertimeTypeCard(
                 type: OvertimeType.beforeWork,
-                icon: '⏰',
+                icon: CupertinoIcons.clock_fill,
                 title: 'Sebelum Kerja',
                 subtitle: 'Lembur sebelum\njam masuk',
                 isSelected: _selectedOvertimeType == OvertimeType.beforeWork,
                 color: _AppColors.orange,
                 bgColor: _AppColors.orangeLight,
-                onTap: () {
-                  setState(() {
-                    if (_selectedOvertimeType == OvertimeType.beforeWork) {
-                      _selectedOvertimeType = null;
-                      _resetOvertimeFields();
-                    } else {
-                      _selectedOvertimeType = OvertimeType.beforeWork;
-                      _resetOvertimeFields();
-                    }
-                  });
-                },
+                enabled: _canApplyOvertime,
+                onTap: _canApplyOvertime
+                    ? () {
+                        setState(() {
+                          if (_selectedOvertimeType ==
+                              OvertimeType.beforeWork) {
+                            _selectedOvertimeType = null;
+                            _resetOvertimeFields();
+                          } else {
+                            _selectedOvertimeType = OvertimeType.beforeWork;
+                            _resetOvertimeFields();
+                          }
+                        });
+                      }
+                    : null,
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _buildOvertimeTypeCard(
                 type: OvertimeType.afterWork,
-                icon: '🌙',
+                icon: CupertinoIcons.moon_fill,
                 title: 'Setelah Kerja',
                 subtitle: 'Lembur setelah\njam pulang',
                 isSelected: _selectedOvertimeType == OvertimeType.afterWork,
                 color: _AppColors.purple,
                 bgColor: _AppColors.purpleLight,
-                onTap: () {
-                  setState(() {
-                    if (_selectedOvertimeType == OvertimeType.afterWork) {
-                      _selectedOvertimeType = null;
-                      _resetOvertimeFields();
-                    } else {
-                      _selectedOvertimeType = OvertimeType.afterWork;
-                      _resetOvertimeFields();
-                    }
-                  });
-                },
+                enabled: _canApplyOvertime,
+                onTap: _canApplyOvertime
+                    ? () {
+                        setState(() {
+                          if (_selectedOvertimeType == OvertimeType.afterWork) {
+                            _selectedOvertimeType = null;
+                            _resetOvertimeFields();
+                          } else {
+                            _selectedOvertimeType = OvertimeType.afterWork;
+                            _resetOvertimeFields();
+                          }
+                        });
+                      }
+                    : null,
               ),
             ),
           ],
@@ -1715,73 +2152,120 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
 
   Widget _buildOvertimeTypeCard({
     required OvertimeType type,
-    required String icon,
+    required IconData icon,
     required String title,
     required String subtitle,
     required bool isSelected,
     required Color color,
     required Color bgColor,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
+    required bool enabled,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.08) : _AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.38,
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withOpacity(0.08) : _AppColors.card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
               color: isSelected ? color : _AppColors.divider,
-              width: isSelected ? 2 : 1),
-          boxShadow: [
-            BoxShadow(
+              width: isSelected ? 2 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
                 color: isSelected
                     ? color.withOpacity(0.15)
                     : Colors.black.withOpacity(0.04),
                 blurRadius: isSelected ? 12 : 6,
-                offset: const Offset(0, 2)),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                      color: isSelected ? color.withOpacity(0.15) : bgColor,
-                      borderRadius: BorderRadius.circular(10)),
-                  child: Center(
-                      child: Text(icon, style: const TextStyle(fontSize: 20))),
-                ),
-                if (isSelected)
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
                   Container(
-                    width: 22,
-                    height: 22,
-                    decoration:
-                        BoxDecoration(color: color, shape: BoxShape.circle),
-                    child: const Icon(Icons.check_rounded,
-                        color: Colors.white, size: 14),
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: isSelected ? color.withOpacity(0.15) : bgColor,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Center(
+                      child: Center(
+                        child: Icon(
+                          icon,
+                          size: 20,
+                          color: isSelected ? color : _AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(title,
+                  if (isSelected)
+                    Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_rounded,
+                        color: Colors.white,
+                        size: 14,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                title,
                 style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: isSelected ? color : _AppColors.textPrimary)),
-            const SizedBox(height: 3),
-            Text(subtitle,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? color : _AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                subtitle,
                 style: const TextStyle(
-                    fontSize: 11,
-                    color: _AppColors.textSecondary,
-                    height: 1.4)),
-          ],
+                  fontSize: 11,
+                  color: _AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+              if (!enabled) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.lock_outline_rounded,
+                      size: 13,
+                      color: _AppColors.textMuted,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Lengkapi absensi',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: _AppColors.textMuted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

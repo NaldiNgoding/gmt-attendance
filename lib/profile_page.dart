@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'welcome_page.dart';
+import 'package:flutter/cupertino.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Profile Page
@@ -285,7 +286,7 @@ class _ProfilePageState extends State<ProfilePage>
 
               // ── App version footer ────────────────────────────────────────
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 50),
                 sliver: SliverToBoxAdapter(
                   child: FadeTransition(
                     opacity: _cardFades[4],
@@ -540,19 +541,19 @@ class _ProfilePageState extends State<ProfilePage>
                 value: '22',
                 label: 'Hadir',
                 color: _success,
-                icon: Icons.check_circle_rounded),
+                icon: CupertinoIcons.checkmark_circle_fill),
             _StatDivider(),
             _StatCell(
                 value: '3',
                 label: 'Cuti',
                 color: _warning,
-                icon: Icons.beach_access_rounded),
+                icon: CupertinoIcons.calendar_badge_minus),
             _StatDivider(),
             _StatCell(
                 value: '5',
                 label: 'Lembur',
                 color: _accent,
-                icon: Icons.nights_stay_rounded),
+                icon: CupertinoIcons.timer_fill),
           ],
         ),
       ),
@@ -966,7 +967,7 @@ class _LogoutButtonState extends State<_LogoutButton> {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Colors.red,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.red.shade100, width: 1.5),
             boxShadow: [
@@ -979,13 +980,13 @@ class _LogoutButtonState extends State<_LogoutButton> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.logout_rounded, color: Colors.red.shade400, size: 18),
+              Icon(Icons.logout_rounded, color: Colors.white, size: 18),
               const SizedBox(width: 8),
               Text('Log Out',
                   style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: Colors.red.shade400)),
+                      color: Colors.white)),
             ],
           ),
         ),

@@ -9,6 +9,7 @@ import 'checklocation.dart';
 import 'attendance_log_screen.dart';
 import 'profile_page.dart';
 import 'lembur.dart';
+import 'package:flutter/cupertino.dart';
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -53,15 +54,20 @@ class _HomePageState extends State<HomePage> {
   String userId = "";
   String empId = "";
   String userAccount = "";
+  int _selectedNavIndex = 0;
   Map<String, dynamic>? attendanceData;
   Map<String, dynamic>? shiftData;
 
-  // Blue Luxury Colors
   static const Color kPrimary = Color(0xFF1E88E5);
   static const Color kSecondary = Color(0xFF0D47A1);
   static const Color kSuccess = Color(0xFF4CAF50);
   static const Color kWarning = Color(0xFFFF9800);
+  // ignore: unused_field
   static const Color kTextBlue = Color(0xFF1A365D);
+  static const Color kBackground = Color(0xFFF6F7FA);
+  static const Color kDarkText = Color(0xFF172033);
+  static const Color kMutedText = Color(0xFF7A8496);
+  static const Color kBorder = Color(0xFFE7EAF0);
 
   @override
   void initState() {
@@ -70,18 +76,6 @@ class _HomePageState extends State<HomePage> {
       _loadHomeData(); // Panggil setelah user data selesai
     });
     _updateTime();
-  }
-
-  String _formatJam(dynamic value) {
-    if (value == null || value.toString().isEmpty) return '-';
-
-    final jam = value.toString().trim().split(':');
-
-    if (jam.length >= 2) {
-      return '${jam[0]}:${jam[1]}';
-    }
-
-    return value.toString();
   }
 
   void _updateTime() {
@@ -239,11 +233,21 @@ class _HomePageState extends State<HomePage> {
       context,
       MaterialPageRoute(
         builder: (context) => AttendanceLogScreen(
+          key: ValueKey('attendance-log-$empId'),
           employeeId: empId,
           employeeName: userName,
         ),
       ),
     );
+  }
+
+  void _selectBottomNav(int index) {
+    if (index == 1 && empId.isEmpty) {
+      return;
+    }
+    setState(() {
+      _selectedNavIndex = index;
+    });
   }
 
   String _getGreeting() {
@@ -256,468 +260,417 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final Size screenSize = MediaQuery.of(context).size;
-
     return Scaffold(
-      body: Stack(
+      backgroundColor: kBackground,
+      extendBody: true,
+      body: IndexedStack(
+        index: _selectedNavIndex,
         children: [
-          // Background Image - tengah dengan ukuran proporsional
-          Positioned.fill(
-            child: Center(
-              child: Opacity(
-                opacity: 0.12,
-                child: Image.asset(
-                  'assets/images/GMT3.png',
-                  width: screenSize.width * 0.45,
-                  height: screenSize.width * 0.45,
-                  fit: BoxFit.contain,
+          _buildHomeContent(),
+          empId.isEmpty
+              ? const Center(
+                  child: CircularProgressIndicator(),
+                )
+              : AttendanceLogScreen(
+                  key: ValueKey('attendance-log-$empId'),
+                  employeeId: empId,
+                  employeeName: userName,
+                ),
+          const ProfilePage(),
+        ],
+      ),
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildHomeContent() {
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(),
+      slivers: [
+        // ==========================================================
+        // HEADER + SHIFT CARD
+        // ==========================================================
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 430,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: 245,
+                  child: _buildHeader(),
+                ),
+                Positioned(
+                  top: 165,
+                  left: 20,
+                  right: 20,
+                  child: _buildShiftCard(),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // ==========================================================
+        // CORE PILLARS
+        // ==========================================================
+        SliverToBoxAdapter(
+          child: _buildCorePillars(),
+        ),
+
+        // ==========================================================
+        // MAIN MENU
+        // ==========================================================
+        SliverToBoxAdapter(
+          child: _buildMenuSection(),
+        ),
+
+        // Bottom spacing
+        const SliverToBoxAdapter(
+          child: SizedBox(height: 110),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        MediaQuery.of(context).padding.top + 18,
+        20,
+        30,
+      ),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            kPrimary,
+            kSecondary,
+          ],
+        ),
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(30),
+          bottomRight: Radius.circular(30),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _getGreeting(),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                userName.isNotEmpty ? userName : 'Karyawan',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                DateFormat(
+                  'EEEE, d MMMM yyyy',
+                ).format(_currentTime),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          GestureDetector(
+            onTap: _openProfile,
+            child: Container(
+              width: 54,
+              height: 54,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 14,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                  style: const TextStyle(
+                    color: kSecondary,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
             ),
           ),
-          // Content
-          SafeArea(
-            child: CustomScrollView(
-              slivers: [
-                // Header dengan greeting
-                SliverToBoxAdapter(
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _getGreeting(),
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: kTextBlue.withOpacity(0.7),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  userName,
-                                  style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: kTextBlue,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            GestureDetector(
-                              onTap: _openProfile,
-                              child: Container(
-                                width: 52,
-                                height: 52,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: LinearGradient(
-                                    colors: [kPrimary, kSecondary],
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: kPrimary.withOpacity(0.3),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    userName.isNotEmpty
-                                        ? userName[0].toUpperCase()
-                                        : 'U',
-                                    style: const TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          DateFormat('EEEE, d MMMM yyyy').format(_currentTime),
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: kTextBlue.withOpacity(0.5),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+        ],
+      ),
+    );
+  }
 
-                // Shift Card
-                SliverToBoxAdapter(
-                  child: Container(
-                    margin: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [kPrimary, kSecondary],
-                      ),
-                      borderRadius: BorderRadius.circular(28),
-                      boxShadow: [
-                        BoxShadow(
-                          color: kPrimary.withOpacity(0.3),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Stack(
-                      children: [
-                        Positioned(
-                          top: -20,
-                          right: -20,
-                          child: Icon(Icons.work_outline,
-                              size: 120, color: Colors.white.withOpacity(0.08)),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Text(
-                                      'Shift Hari Ini',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    if (shiftData?['shiftname'] != null &&
-                                        shiftData!['shiftname']
-                                            .toString()
-                                            .isNotEmpty) ...[
-                                      const SizedBox(width: 10),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.25),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          shiftData!['shiftname'].toString(),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'Jam Kerja',
-                                          style: TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _formatJam(shiftData?['schedulein']),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 28,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    height: 40,
-                                    width: 1,
-                                    color: Colors.white.withOpacity(0.3),
-                                  ),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
-                                      children: [
-                                        const Text(
-                                          'Sampai',
-                                          style: TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _formatJam(shiftData?['scheduleout']),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 28,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 20),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildActionButton(
-                                      icon: Icons.login_rounded,
-                                      label: 'Clock In',
-                                      color: kSuccess,
-                                      onTap: () async {
-                                        final result = await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                const CheckLocationPage(
-                                                    isCheckIn: true),
-                                          ),
-                                        );
-                                        if (result == null ||
-                                            result['canProceed'] != true)
-                                          return;
-
-                                        final File? photo =
-                                            await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => CameraPage(
-                                              isCheckIn: true,
-                                              employeeId: result['employeeId'],
-                                              employeeName:
-                                                  result['employeeName'],
-                                              attendanceId:
-                                                  result['attendanceId'],
-                                              locationData:
-                                                  result['locationData'],
-                                              currentPosition:
-                                                  result['currentPosition'],
-                                              canCheckInOut:
-                                                  result['canCheckInOut'],
-                                            ),
-                                          ),
-                                        );
-
-                                        if (photo != null) {
-                                          final bytes =
-                                              await photo.readAsBytes();
-                                          final base64Image =
-                                              base64Encode(bytes);
-                                          await _clockIn(base64Image);
-                                          _showSuccessDialog(
-                                              "Check In Berhasil",
-                                              "Anda berhasil melakukan Check In.");
-                                          await _loadHomeData();
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: _buildActionButton(
-                                      icon: Icons.logout_rounded,
-                                      label: 'Clock Out',
-                                      color: kWarning,
-                                      onTap: () async {
-                                        final result = await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                const CheckLocationPage(
-                                                    isCheckIn: false),
-                                          ),
-                                        );
-                                        if (result == null ||
-                                            result['canProceed'] != true)
-                                          return;
-
-                                        final File? photo =
-                                            await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => CameraPage(
-                                              isCheckIn: false,
-                                              employeeId: result['employeeId'],
-                                              employeeName:
-                                                  result['employeeName'],
-                                              attendanceId:
-                                                  result['attendanceId'],
-                                              locationData:
-                                                  result['locationData'],
-                                              currentPosition:
-                                                  result['currentPosition'],
-                                              canCheckInOut:
-                                                  result['canCheckInOut'],
-                                            ),
-                                          ),
-                                        );
-
-                                        if (photo != null) {
-                                          final bytes =
-                                              await photo.readAsBytes();
-                                          final base64Image =
-                                              base64Encode(bytes);
-                                          await _clockOut(base64Image);
-                                          _showSuccessDialog(
-                                              "Check Out Berhasil",
-                                              "Anda berhasil melakukan Check Out.");
-                                          await _loadHomeData();
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Gambar Core Pillars
-                SliverToBoxAdapter(
-                  child: Container(
-                    margin:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    child: Center(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          width: MediaQuery.of(context).size.width * 0.7,
-                          child: Image.asset(
-                            'assets/images/core.png',
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Menu Section
-                SliverToBoxAdapter(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Menu',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: kTextBlue,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        GridView.count(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisCount: 3,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          childAspectRatio: 0.9,
-                          children: [
-                            _buildMenuItem(
-                              icon: Icons.history_rounded,
-                              title: 'Riwayat',
-                              color: kPrimary,
-                              onTap: _openAttendanceLog,
-                            ),
-                            _buildMenuItem(
-                              icon: Icons.beach_access_rounded,
-                              title: 'Time Off',
-                              color: Colors.teal,
-                              onTap: () {},
-                            ),
-                            _buildMenuItem(
-                              icon: Icons.nightlight_round,
-                              title: 'Lembur',
-                              color: kWarning,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        OvertimeSubmissionPage(
-                                      empid: empId,
-                                      nama: userName,
-                                      nik: userId,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                            _buildMenuItem(
-                              icon: Icons.check_circle_rounded,
-                              title: 'Approval',
-                              color: kSuccess,
-                              onTap: () {},
-                            ),
-                            _buildMenuItem(
-                              icon: Icons.person_rounded,
-                              title: 'Profil',
-                              color: kSecondary,
-                              onTap: _openProfile,
-                            ),
-                            _buildMenuItem(
-                              icon: Icons.help_rounded,
-                              title: 'Bantuan',
-                              color: Colors.purple,
-                              onTap: () {},
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SliverToBoxAdapter(child: SizedBox(height: 80)),
-              ],
-            ),
+  Widget _buildShiftCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: kBorder,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: kSecondary.withOpacity(0.12),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-      bottomNavigationBar: _buildBottomNav(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: kPrimary.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.schedule_rounded,
+                      color: kPrimary,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 7),
+                    const Text(
+                      'Shift Hari Ini',
+                      style: TextStyle(
+                        color: kDarkText,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (shiftData?['shiftname'] != null &&
+                  shiftData!['shiftname'].toString().isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: kBackground,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    shiftData!['shiftname'].toString(),
+                    style: const TextStyle(
+                      color: kSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // ----------------------------------------------------------
+          // TIME
+          // ----------------------------------------------------------
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Jam Kerja',
+                      style: TextStyle(
+                        color: kMutedText,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      shiftData?['schedulein'] ?? '-',
+                      style: const TextStyle(
+                        color: kDarkText,
+                        fontSize: 25,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 44,
+                color: kBorder,
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Sampai',
+                        style: TextStyle(
+                          color: kMutedText,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        shiftData?['scheduleout'] ?? '-',
+                        style: const TextStyle(
+                          color: kDarkText,
+                          fontSize: 25,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          // ----------------------------------------------------------
+          // ACTION BUTTONS
+          // ----------------------------------------------------------
+          Row(
+            children: [
+              Expanded(
+                child: _buildActionButton(
+                  icon: Icons.login_rounded,
+                  label: 'Clock In',
+                  color: kSuccess,
+                  onTap: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CheckLocationPage(
+                          isCheckIn: true,
+                        ),
+                      ),
+                    );
+
+                    if (result == null || result['canProceed'] != true) {
+                      return;
+                    }
+
+                    final File? photo = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => CameraPage(
+                          isCheckIn: true,
+                          employeeId: result['employeeId'],
+                          employeeName: result['employeeName'],
+                          attendanceId: result['attendanceId'],
+                          locationData: result['locationData'],
+                          currentPosition: result['currentPosition'],
+                          canCheckInOut: result['canCheckInOut'],
+                        ),
+                      ),
+                    );
+                    if (photo != null) {
+                      final bytes = await photo.readAsBytes();
+                      final base64Image = base64Encode(bytes);
+                      await _clockIn(base64Image);
+                      _showSuccessDialog(
+                        "Check In Berhasil",
+                        "Anda berhasil melakukan Check In.",
+                      );
+                      await _loadHomeData();
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildActionButton(
+                  icon: Icons.logout_rounded,
+                  label: 'Clock Out',
+                  color: kWarning,
+                  onTap: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CheckLocationPage(
+                          isCheckIn: false,
+                        ),
+                      ),
+                    );
+
+                    if (result == null || result['canProceed'] != true) {
+                      return;
+                    }
+
+                    final File? photo = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => CameraPage(
+                          isCheckIn: false,
+                          employeeId: result['employeeId'],
+                          employeeName: result['employeeName'],
+                          attendanceId: result['attendanceId'],
+                          locationData: result['locationData'],
+                          currentPosition: result['currentPosition'],
+                          canCheckInOut: result['canCheckInOut'],
+                        ),
+                      ),
+                    );
+
+                    if (photo != null) {
+                      final bytes = await photo.readAsBytes();
+                      final base64Image = base64Encode(bytes);
+                      await _clockOut(base64Image);
+                      _showSuccessDialog(
+                        "Check Out Berhasil",
+                        "Anda berhasil melakukan Check Out.",
+                      );
+                      await _loadHomeData();
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -727,28 +680,145 @@ class _HomePageState extends State<HomePage> {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return ElevatedButton(
-      onPressed: onTap,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.white,
-        foregroundColor: color,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 14),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 20),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+    return SizedBox(
+      height: 50,
+      child: ElevatedButton(
+        onPressed: onTap,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color.withOpacity(0.08),
+          foregroundColor: color,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          padding: const EdgeInsets.symmetric(
+            horizontal: 10,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+            side: BorderSide(
+              color: color.withOpacity(0.12),
+              width: 1,
             ),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+            ),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCorePillars() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        20,
+      ),
+      child: Center(
+        child: Image.asset(
+          'assets/images/core.png',
+          width: MediaQuery.of(context).size.width * 0.62,
+          fit: BoxFit.contain,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuSection() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+        20,
+        4,
+        20,
+        0,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Main Menu',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: kDarkText,
+            ),
+          ),
+          const SizedBox(height: 16),
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 3,
+            mainAxisSpacing: 22,
+            crossAxisSpacing: 18,
+            childAspectRatio: 0.92,
+            children: [
+              _buildMenuItem(
+                icon: CupertinoIcons.clock_fill,
+                title: 'Riwayat',
+                color: kPrimary,
+                onTap: _openAttendanceLog,
+              ),
+              _buildMenuItem(
+                icon: CupertinoIcons.calendar_badge_minus,
+                title: 'Time Off',
+                color: Colors.teal,
+                onTap: () {},
+              ),
+              _buildMenuItem(
+                icon: CupertinoIcons.timer_fill,
+                title: 'Lembur',
+                color: kWarning,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => OvertimeSubmissionPage(
+                        empid: empId,
+                        nama: userName,
+                        nik: userId,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              _buildMenuItem(
+                icon: CupertinoIcons.doc_checkmark_fill,
+                title: 'Approval',
+                color: kSuccess,
+                onTap: () {},
+              ),
+              _buildMenuItem(
+                icon: CupertinoIcons.person_solid,
+                title: 'Profil',
+                color: kSecondary,
+                onTap: _openProfile,
+              ),
+              _buildMenuItem(
+                icon: CupertinoIcons.question_circle_fill,
+                title: 'Bantuan',
+                color: Colors.purple,
+                onTap: () {},
+              ),
+            ],
           ),
         ],
       ),
@@ -763,80 +833,107 @@ class _HomePageState extends State<HomePage> {
   }) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  color.withOpacity(0.18),
+                  color.withOpacity(0.06),
+                ],
               ),
-              child: Icon(icon, size: 28, color: color),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: kTextBlue,
+              border: Border.all(
+                color: color.withOpacity(0.08),
+                width: 1,
               ),
             ),
-          ],
-        ),
+            child: Center(
+              child: Icon(
+                icon,
+                size: 27,
+                color: color,
+              ),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: kDarkText,
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildBottomNav() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: kPrimary.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(
+          18,
+          0,
+          18,
+          12,
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 8,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(
+            color: kBorder,
+            width: 1,
           ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _bottomNavItem(
-              icon: Icons.home_rounded,
-              label: 'Beranda',
-              isSelected: true,
-              onTap: () {},
+            Expanded(
+              child: _bottomNavItem(
+                icon: CupertinoIcons.house_fill,
+                label: 'Beranda',
+                isSelected: _selectedNavIndex == 0,
+                onTap: () => _selectBottomNav(0),
+              ),
             ),
-            _bottomNavItem(
-              icon: Icons.history_rounded,
-              label: 'Riwayat',
-              isSelected: false,
-              onTap: _openAttendanceLog,
+            Expanded(
+              child: _bottomNavItem(
+                icon: CupertinoIcons.clock_fill,
+                label: 'Riwayat',
+                isSelected: _selectedNavIndex == 1,
+                onTap: () => _selectBottomNav(1),
+              ),
             ),
-            _bottomNavItem(
-              icon: Icons.person_rounded,
-              label: 'Profil',
-              isSelected: false,
-              onTap: _openProfile,
+            Expanded(
+              child: _bottomNavItem(
+                icon: CupertinoIcons.person_solid,
+                label: 'Profil',
+                isSelected: _selectedNavIndex == 2,
+                onTap: () => _selectBottomNav(2),
+              ),
             ),
           ],
         ),
@@ -852,24 +949,34 @@ class _HomePageState extends State<HomePage> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      borderRadius: BorderRadius.circular(18),
+      child: AnimatedContainer(
+        duration: const Duration(
+          milliseconds: 180,
+        ),
+        padding: const EdgeInsets.symmetric(
+          vertical: 6,
+          horizontal: 10,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected ? kPrimary.withOpacity(0.08) : Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
+              size: 22,
               color: isSelected ? kPrimary : Colors.grey.shade400,
-              size: 24,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
             Text(
               label,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 color: isSelected ? kPrimary : Colors.grey.shade400,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
               ),
             ),
           ],
