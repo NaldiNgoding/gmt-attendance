@@ -9,6 +9,7 @@ import 'checklocation.dart';
 import 'attendance_log_screen.dart';
 import 'profile_page.dart';
 import 'lembur.dart';
+import 'att_announcement.dart';
 import 'package:flutter/cupertino.dart';
 
 class HomePage extends StatefulWidget {
@@ -290,12 +291,17 @@ class _HomePageState extends State<HomePage> {
         SliverToBoxAdapter(
           child: _buildCorePillars(),
         ),
-
         // ==========================================================
         // MAIN MENU
         // ==========================================================
         SliverToBoxAdapter(
           child: _buildMenuSection(),
+        ),
+        // ==========================================================
+        // ANNOUNCEMENT
+        // ==========================================================
+        SliverToBoxAdapter(
+          child: const AnnouncementSection(),
         ),
 
         // Bottom spacing
@@ -741,77 +747,120 @@ class _HomePageState extends State<HomePage> {
         20,
         4,
         20,
-        0,
+        20,
+      ),
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        18,
+        16,
+        30,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: kBorder,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Main Menu',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: kDarkText,
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              'Main Menu',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: kDarkText,
+              ),
             ),
           ),
-          const SizedBox(height: 16),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 3,
-            mainAxisSpacing: 22,
-            crossAxisSpacing: 18,
-            childAspectRatio: 0.92,
+          const SizedBox(height: 18),
+          Column(
             children: [
-              _buildMenuItem(
-                icon: CupertinoIcons.clock_fill,
-                title: 'Riwayat',
-                color: kPrimary,
-                onTap: _openAttendanceLog,
-              ),
-              _buildMenuItem(
-                icon: CupertinoIcons.calendar_badge_minus,
-                title: 'Time Off',
-                color: Colors.teal,
-                onTap: () {},
-              ),
-              _buildMenuItem(
-                icon: CupertinoIcons.timer_fill,
-                title: 'Lembur',
-                color: kWarning,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => OvertimeSubmissionPage(
-                        empid: empId,
-                        nama: userName,
-                        nik: userId,
-                      ),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMenuItem(
+                      icon: CupertinoIcons.clock_fill,
+                      title: 'Riwayat',
+                      color: kPrimary,
+                      onTap: _openAttendanceLog,
                     ),
-                  );
-                },
+                  ),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: _buildMenuItem(
+                      icon: CupertinoIcons.calendar_badge_minus,
+                      title: 'Time Off',
+                      color: Colors.teal,
+                      onTap: () {},
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: _buildMenuItem(
+                      icon: CupertinoIcons.timer_fill,
+                      title: 'Lembur',
+                      color: kWarning,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => OvertimeSubmissionPage(
+                              empid: empId,
+                              nama: userName,
+                              nik: userId,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-              _buildMenuItem(
-                icon: CupertinoIcons.doc_checkmark_fill,
-                title: 'Approval',
-                color: kSuccess,
-                onTap: () {},
-              ),
-              _buildMenuItem(
-                icon: CupertinoIcons.person_solid,
-                title: 'Profil',
-                color: kSecondary,
-                onTap: _openProfile,
-              ),
-              _buildMenuItem(
-                icon: CupertinoIcons.question_circle_fill,
-                title: 'Bantuan',
-                color: Colors.purple,
-                onTap: () {},
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMenuItem(
+                      icon: CupertinoIcons.doc_checkmark_fill,
+                      title: 'Approval',
+                      color: kSuccess,
+                      onTap: () {},
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: _buildMenuItem(
+                      icon: CupertinoIcons.person_solid,
+                      title: 'Profil',
+                      color: kSecondary,
+                      onTap: _openProfile,
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: _buildMenuItem(
+                      icon: CupertinoIcons.question_circle_fill,
+                      title: 'Bantuan',
+                      color: Colors.purple,
+                      onTap: () {},
+                    ),
+                  ),
+                ],
               ),
             ],
-          ),
+          )
         ],
       ),
     );
@@ -830,8 +879,8 @@ class _HomePageState extends State<HomePage> {
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
           Container(
-            width: 60,
-            height: 60,
+            width: 52,
+            height: 52,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
               gradient: LinearGradient(
@@ -855,7 +904,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
-          const SizedBox(height: 9),
+          const SizedBox(height: 5),
           Text(
             title,
             textAlign: TextAlign.center,
