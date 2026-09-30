@@ -800,9 +800,9 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
       DateTime.now().month,
       DateTime.now().day,
     );
-    // User hanya boleh memilih hari ini sampai maksimal 3 hari sebelumnya.
+    // User hanya boleh memilih hari ini sampai maksimal 2 hari sebelumnya.
     final DateTime minDate = today.subtract(
-      const Duration(days: 3),
+      const Duration(days: 2),
     );
     // Pastikan tanggal awal kalender berada di dalam range.
     DateTime initialDate = _selectedDate;
