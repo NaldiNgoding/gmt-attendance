@@ -24,7 +24,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Absensi Pro',
+      title: 'GMT ATTENDANCE',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         scaffoldBackgroundColor: kSurface,
@@ -428,6 +428,28 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  String _formatHHmm(dynamic raw) {
+    if (raw == null) return '-';
+    final s = raw.toString().trim();
+    if (s.isEmpty) return '-';
+
+    // Kalau format "HH:mm:ss" atau "HH:mm:ss.SSS"
+    final parts = s.split(':');
+    if (parts.length >= 2) {
+      final hh = parts[0].padLeft(2, '0');
+      final mm = parts[1].padLeft(2, '0');
+      return '$hh:$mm';
+    }
+
+    // Fallback: coba parse sebagai DateTime
+    try {
+      final dt = DateTime.parse(s);
+      return DateFormat('HH:mm').format(dt);
+    } catch (_) {
+      return s;
+    }
+  }
+
   Widget _buildShiftCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -523,7 +545,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      shiftData?['schedulein'] ?? '-',
+                      _formatHHmm(shiftData?['schedulein']),
                       style: const TextStyle(
                         color: kDarkText,
                         fontSize: 25,
@@ -554,7 +576,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        shiftData?['scheduleout'] ?? '-',
+                        _formatHHmm(shiftData?['scheduleout']),
                         style: const TextStyle(
                           color: kDarkText,
                           fontSize: 25,

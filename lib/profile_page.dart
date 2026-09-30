@@ -1,19 +1,23 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'welcome_page.dart';
 import 'attendance_home.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Profile Page — Backend-driven
-//  Data source:
-//   - GET /api/getemployeebyid?id=<empid>           → personal
-//   - GET /api/getemploymentinfobyid?id=<empid>     → employment
+//  Data sources:
+//   - GET  /api/getemployeebyid?id=<empid>                  → personal
+//   - GET  /api/getemploymentinfobyid?id=<empid>            → employment
+//   - GET  /api/new_get_profile_picture?empid=&isthumbnail= → photo
+//   - POST /api/new_upload_profile_picture                  → upload photo
 // ─────────────────────────────────────────────────────────────────────────────
 
 const String _kBaseUrl = "http://localhost:8000";
@@ -37,11 +41,17 @@ class _ProfilePageState extends State<ProfilePage>
   static const _gold = Color(0xFFD4A853);
 
   // ── state ─────────────────────────────────────────────────────────────────
-  Map<String, dynamic>? _personal;   // dari getemployeebyid
-  Map<String, dynamic>? _employment; // dari getemploymentinfobyid
+  Map<String, dynamic>? _personal;
+  Map<String, dynamic>? _employment;
   String _empid = '';
   bool _loading = true;
   String? _error;
+
+  // ── profile picture state ────────────────────────────────────────────────
+  Uint8List? _profileImageBytes;
+  Uint8List? _profileThumbBytes;
+  bool _uploadingPhoto = false;
+  final ImagePicker _picker = ImagePicker();
 
   // ── animations ────────────────────────────────────────────────────────────
   late final AnimationController _masterCtrl;
@@ -68,8 +78,11 @@ class _ProfilePageState extends State<ProfilePage>
     super.dispose();
   }
 
-  // ── DATA LOADING ──────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  //  DATA LOADING
+  // ══════════════════════════════════════════════════════════════════════════
   Future<void> _loadAll() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -79,6 +92,7 @@ class _ProfilePageState extends State<ProfilePage>
     final empid = prefs.getString('empid') ?? '';
 
     if (empid.isEmpty) {
+      if (!mounted) return;
       setState(() {
         _loading = false;
         _error = 'EmpID tidak ditemukan. Silakan login ulang.';
@@ -88,7 +102,7 @@ class _ProfilePageState extends State<ProfilePage>
 
     _empid = empid;
 
-    // Fetch paralel biar cepat
+    // 1) Fetch personal + employment paralel
     final results = await Future.wait([
       _fetchJson("$_kBaseUrl/api/getemployeebyid?id=$empid"),
       _fetchJson("$_kBaseUrl/api/getemploymentinfobyid?id=$empid"),
@@ -112,15 +126,19 @@ class _ProfilePageState extends State<ProfilePage>
       _employment = _firstItem(employmentRes);
       _loading = false;
     });
+
+    // 2) Fetch foto profil (tidak blocking, dijalankan setelah UI tampil)
+    _loadProfilePicture();
   }
 
   /// GET JSON, return Map response atau null kalau gagal
   Future<Map<String, dynamic>?> _fetchJson(String url) async {
     try {
       debugPrint("[Profile] GET $url");
-      final res = await http
-          .get(Uri.parse(url), headers: {'Accept': 'application/json'})
-          .timeout(const Duration(seconds: 15));
+      final res = await http.get(
+        Uri.parse(url),
+        headers: {'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 15));
 
       debugPrint("[Profile] status=${res.statusCode}");
       if (res.statusCode != 200) return null;
@@ -145,7 +163,186 @@ class _ProfilePageState extends State<ProfilePage>
     return null;
   }
 
-  // ── getters helpers ───────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  //  PROFILE PICTURE — GET
+  // ══════════════════════════════════════════════════════════════════════════
+  Future<void> _loadProfilePicture() async {
+    if (_empid.isEmpty) return;
+
+    final url = Uri.parse(
+      "$_kBaseUrl/api/new_get_profile_picture"
+      "?empid=$_empid&isthumbnail=0",
+    );
+
+    try {
+      debugPrint("[Profile] GET $url");
+      final res = await http.get(
+        url,
+        headers: {'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 20));
+
+      debugPrint("[Profile] photo status=${res.statusCode}");
+      if (res.statusCode != 200) return;
+
+      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      if (json['success'] != true) {
+        debugPrint("[Profile] photo not found: ${json['message']}");
+        return;
+      }
+
+      final data = json['data'] as Map<String, dynamic>?;
+      final imageB64 = data?['image_base64']?.toString();
+      final thumbB64 = data?['thumbnail_base64']?.toString();
+
+      if (!mounted) return;
+
+      setState(() {
+        if (imageB64 != null && imageB64.isNotEmpty) {
+          _profileImageBytes = base64Decode(imageB64);
+        }
+        if (thumbB64 != null && thumbB64.isNotEmpty) {
+          _profileThumbBytes = base64Decode(thumbB64);
+        }
+      });
+    } catch (e, st) {
+      debugPrint("[Profile] photo error: $e\n$st");
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  PROFILE PICTURE — UPLOAD
+  // ══════════════════════════════════════════════════════════════════════════
+  Future<void> _pickAndUploadPhoto(ImageSource source) async {
+    if (_uploadingPhoto) return;
+
+    try {
+      final XFile? picked = await _picker.pickImage(
+        source: source,
+        maxWidth: 1080,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+
+      if (!mounted) return;
+      setState(() => _uploadingPhoto = true);
+
+      // Baca bytes & convert ke base64
+      final bytes = await picked.readAsBytes();
+      final base64Str = base64Encode(bytes);
+
+      // Ambil ekstensi
+      final ext = picked.name.contains('.')
+          ? '.${picked.name.split('.').last.toLowerCase()}'
+          : '.jpg';
+
+      debugPrint("[Profile] uploading photo, ext=$ext size=${bytes.length}");
+
+      final url = Uri.parse("$_kBaseUrl/api/new_upload_profile_picture");
+      final request = http.MultipartRequest('POST', url)
+        ..fields['empid'] = _empid
+        ..fields['profile_base64'] = base64Str
+        ..fields['image_type'] = ext;
+
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 60));
+      final res = await http.Response.fromStream(streamed);
+
+      debugPrint("[Profile] upload status=${res.statusCode}");
+      debugPrint("[Profile] upload body=${res.body}");
+
+      Map<String, dynamic>? json;
+      try {
+        json = jsonDecode(res.body) as Map<String, dynamic>;
+      } catch (_) {}
+
+      if (!mounted) return;
+
+      if (json != null && json['success'] == true) {
+        _showSnack('Foto profil berhasil diupdate', success: true);
+        // Refresh dari server (server re-crop/resize)
+        await _loadProfilePicture();
+      } else {
+        _showSnack(json?['message']?.toString() ?? 'Gagal upload foto');
+      }
+    } catch (e, st) {
+      debugPrint("[Profile] upload error: $e\n$st");
+      if (mounted) _showSnack('Gagal upload foto: $e');
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
+  }
+
+  void _showPhotoSourceSheet() {
+    if (_uploadingPhoto) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Ubah Foto Profil',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 16),
+            _PhotoSourceTile(
+              icon: Icons.photo_camera_rounded,
+              label: 'Ambil dari Kamera',
+              color: _navy,
+              onTap: () {
+                Navigator.pop(context);
+                _pickAndUploadPhoto(ImageSource.camera);
+              },
+            ),
+            const SizedBox(height: 10),
+            _PhotoSourceTile(
+              icon: Icons.photo_library_rounded,
+              label: 'Pilih dari Galeri',
+              color: _accent,
+              onTap: () {
+                Navigator.pop(context);
+                _pickAndUploadPhoto(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSnack(String msg, {bool success = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: success ? _success : Colors.red.shade600,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  GETTERS
+  // ══════════════════════════════════════════════════════════════════════════
   String _p(String key, [String fallback = '-']) {
     final v = _personal?[key];
     if (v == null) return fallback;
@@ -193,7 +390,9 @@ class _ProfilePageState extends State<ProfilePage>
     return 'U';
   }
 
-  // ── ANIMATIONS ────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  //  ANIMATIONS
+  // ══════════════════════════════════════════════════════════════════════════
   void _initAnimations() {
     _masterCtrl = AnimationController(
       vsync: this,
@@ -222,8 +421,8 @@ class _ProfilePageState extends State<ProfilePage>
       return Tween<double>(begin: 0.0, end: 1.0).animate(
         CurvedAnimation(
           parent: _masterCtrl,
-          curve: Interval(
-              start, (start + 0.25).clamp(0.0, 1.0), curve: Curves.easeOut),
+          curve: Interval(start, (start + 0.25).clamp(0.0, 1.0),
+              curve: Curves.easeOut),
         ),
       );
     });
@@ -233,8 +432,8 @@ class _ProfilePageState extends State<ProfilePage>
           .animate(
         CurvedAnimation(
           parent: _masterCtrl,
-          curve: Interval(
-              start, (start + 0.28).clamp(0.0, 1.0), curve: Curves.easeOutCubic),
+          curve: Interval(start, (start + 0.28).clamp(0.0, 1.0),
+              curve: Curves.easeOutCubic),
         ),
       );
     });
@@ -242,22 +441,21 @@ class _ProfilePageState extends State<ProfilePage>
     _masterCtrl.forward();
   }
 
-  // ── BUILD ─────────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  //  BUILD
+  // ══════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _surface,
       body: Stack(
         children: [
-          // ── Main content ──────────────────────────────────────────────
           if (_loading)
             const Center(child: CircularProgressIndicator(color: _navy))
           else if (_error != null)
             _buildError()
           else
             _buildContent(),
-
-          // ── Floating back button ──────────────────────────────────────
           Positioned(
             top: MediaQuery.of(context).padding.top + 10,
             left: 16,
@@ -524,7 +722,9 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // ── HERO ──────────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  //  HERO
+  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildHero() {
     return AnimatedBuilder(
       animation: Listenable.merge([_masterCtrl, _avatarPulse]),
@@ -599,7 +799,7 @@ class _ProfilePageState extends State<ProfilePage>
                 ),
               ),
 
-              // Text content
+              // Text + avatar content
               Positioned(
                 top: MediaQuery.of(context).padding.top + 56,
                 left: 0,
@@ -610,7 +810,9 @@ class _ProfilePageState extends State<ProfilePage>
                       scale: _avatarScale,
                       child: Stack(
                         alignment: Alignment.center,
+                        clipBehavior: Clip.none,
                         children: [
+                          // Pulsing ring
                           Transform.scale(
                             scale: 0.92 + (_avatarPulse.value * 0.08),
                             child: Container(
@@ -626,6 +828,7 @@ class _ProfilePageState extends State<ProfilePage>
                               ),
                             ),
                           ),
+                          // Gold outer ring
                           Container(
                             width: 88,
                             height: 88,
@@ -641,6 +844,7 @@ class _ProfilePageState extends State<ProfilePage>
                               ],
                             ),
                           ),
+                          // ── Avatar circle with photo ─────────────────
                           Container(
                             width: 80,
                             height: 80,
@@ -654,19 +858,28 @@ class _ProfilePageState extends State<ProfilePage>
                                   Color(0xFF0D3A7A),
                                 ],
                               ),
+                              image: _profileImageBytes != null
+                                  ? DecorationImage(
+                                      image: MemoryImage(_profileImageBytes!),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
                             ),
-                            child: Center(
-                              child: Text(
-                                _initials,
-                                style: const TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                            ),
+                            child: _profileImageBytes == null
+                                ? Center(
+                                    child: Text(
+                                      _initials,
+                                      style: const TextStyle(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white,
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                                  )
+                                : null,
                           ),
+                          // Online badge
                           Positioned(
                             bottom: 4,
                             right: 4,
@@ -678,6 +891,44 @@ class _ProfilePageState extends State<ProfilePage>
                                 shape: BoxShape.circle,
                                 border:
                                     Border.all(color: Colors.white, width: 2),
+                              ),
+                            ),
+                          ),
+                          // ── Edit photo button ─────────────────────────
+                          Positioned(
+                            top: -2,
+                            right: -2,
+                            child: GestureDetector(
+                              onTap: _showPhotoSourceSheet,
+                              child: Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: _gold, width: 2),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.15),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: _uploadingPhoto
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(7),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation(_navy),
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.photo_camera_rounded,
+                                        size: 14,
+                                        color: _navy,
+                                      ),
                               ),
                             ),
                           ),
@@ -728,7 +979,9 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // ── STATS (dummy, karena belum ada API absensi) ───────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  //  STATS (dummy)
+  // ══════════════════════════════════════════════════════════════════════════
   Widget _buildStats() {
     return Transform.translate(
       offset: const Offset(0, -20),
@@ -773,7 +1026,9 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // ── LOGOUT ────────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  //  LOGOUT
+  // ══════════════════════════════════════════════════════════════════════════
   void _confirmLogout() {
     showModalBottomSheet(
       context: context,
@@ -926,8 +1181,8 @@ class _BackButton extends StatelessWidget {
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white.withOpacity(0.25), width: 1),
         ),
-        child: const Icon(Icons.arrow_back_rounded,
-            color: Colors.white, size: 18),
+        child:
+            const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 18),
       ),
     );
   }
@@ -1127,6 +1382,63 @@ class _InfoRow extends StatelessWidget {
         if (!isLast)
           Divider(color: Colors.grey.shade100, height: 1, indent: 62),
       ],
+    );
+  }
+}
+
+// ── Photo source tile (bottom sheet) ─────────────────────────────────────────
+class _PhotoSourceTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _PhotoSourceTile({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withOpacity(0.15)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                color: Colors.grey.shade400, size: 20),
+          ],
+        ),
+      ),
     );
   }
 }
