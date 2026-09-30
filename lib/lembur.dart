@@ -410,7 +410,6 @@ class _AppColors {
   static const Color success = Color(0xFF10B981);
   static const Color successLight = Color(0xFFECFDF5);
   static const Color error = Color(0xFFEF4444);
-  static const Color errorLight = Color(0xFFFEF2F2);
   static const Color warning = Color(0xFFF59E0B);
   // ignore: unused_field
   static const Color warningLight = Color(0xFFFFFBEB);

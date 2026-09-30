@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'welcome_page.dart';
@@ -7,12 +8,13 @@ import 'attendance_home.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Cek status login
+  await Hive.initFlutter(); // ← tambah
+  await Hive.openBox('attendance_pending'); // ← tambah
+
   final prefs = await SharedPreferences.getInstance();
   final empid = prefs.getString('empid') ?? '';
-  final isLoggedIn = empid.isNotEmpty;
 
-  runApp(GmtApp(isLoggedIn: isLoggedIn));
+  runApp(GmtApp(isLoggedIn: empid.isNotEmpty));
 }
 
 class GmtApp extends StatelessWidget {
