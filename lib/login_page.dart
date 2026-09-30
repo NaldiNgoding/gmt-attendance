@@ -198,10 +198,8 @@ class _LoginPageState extends State<LoginPage>
         prefs.setString('photo', data["data"]["emp"]["photo"] ?? "");
         prefs.setString(
             'locationid', data["data"]["emp"]["locationid"].toString());
-
         if (mounted) {
-          Navigator.pushReplacement(
-            context,
+          Navigator.of(context).pushAndRemoveUntil(
             PageRouteBuilder(
               pageBuilder: (_, anim, __) => const HomePage(),
               transitionsBuilder: (_, anim, __, child) => FadeTransition(
@@ -210,6 +208,7 @@ class _LoginPageState extends State<LoginPage>
               ),
               transitionDuration: const Duration(milliseconds: 500),
             ),
+            (route) => false, // ← hapus semua route sebelumnya
           );
         }
       } else {

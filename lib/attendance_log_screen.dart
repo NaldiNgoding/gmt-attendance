@@ -65,6 +65,7 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
 
   Future<void> fetchAttendanceLogs() async {
     try {
+      if (!mounted) return;
       setState(() => isLoading = true);
 
       String startStr = DateFormat('yyyy-MM-dd').format(startDate!);
@@ -85,17 +86,19 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
           List<dynamic> rawData = decoded['data'] ?? [];
           List<AttendanceData> processedData = _processRawData(rawData);
 
+          if (!mounted) return;
           setState(() {
             attendanceLogs = _filterData(processedData);
           });
         }
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -132,16 +135,16 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
       '${DateFormat('dd MMM').format(startDate!)} - ${DateFormat('dd MMM yyyy').format(endDate!)}';
 
   // ====== HELPER DEKORASI ======
-  BoxDecoration _cardDecoration({double radius = 20}) {
+  BoxDecoration _cardDecoration({double radius = 14}) {
     return BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(color: primaryColor.withOpacity(0.07)),
       boxShadow: [
         BoxShadow(
-          color: primaryColor.withOpacity(0.10),
-          blurRadius: 20,
-          offset: const Offset(0, 8),
+          color: primaryColor.withOpacity(0.08),
+          blurRadius: 10,
+          offset: const Offset(0, 3),
         ),
       ],
     );
@@ -170,20 +173,21 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
           colors: [secondaryColor, primaryColor, accentColor],
         ),
         borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(30),
-          bottomRight: Radius.circular(30),
+          bottomLeft: Radius.circular(22),
+          bottomRight: Radius.circular(22),
         ),
         boxShadow: [
           BoxShadow(
-            color: primaryColor.withOpacity(0.35),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+            color: primaryColor.withOpacity(0.3),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
       child: SafeArea(
+        bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 18),
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
           child: Column(
             children: [
               Row(
@@ -199,21 +203,41 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                   const Text(
                     'Riwayat Absensi',
                     style: TextStyle(
-                      fontSize: 18,
+                      fontSize: 16,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
-                      letterSpacing: 0.4,
+                      letterSpacing: 0.3,
                     ),
                   ),
                   _buildIconButton(Icons.refresh_rounded, fetchAttendanceLogs),
                 ],
               ),
-              const SizedBox(height: 14),
-              _buildPeriodSelector(),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               _buildNavigationRow(),
-              const SizedBox(height: 12),
-              _buildStatsBadge(),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _getPeriodRange(),
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildStatsBadge(),
+                ],
+              ),
             ],
           ),
         ),
@@ -225,27 +249,27 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
     return GestureDetector(
       onTap: () => _showMonthYearPicker(),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.18),
-          borderRadius: BorderRadius.circular(25),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.white.withOpacity(0.35)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.calendar_month_rounded,
-                color: Colors.white, size: 17),
-            const SizedBox(width: 8),
+                color: Colors.white, size: 15),
+            const SizedBox(width: 6),
             Text(
               _getPeriodName(),
               style: const TextStyle(
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
               ),
             ),
-            const Icon(Icons.arrow_drop_down, color: Colors.white, size: 22),
+            const Icon(Icons.arrow_drop_down, color: Colors.white, size: 20),
           ],
         ),
       ),
@@ -257,65 +281,54 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         _buildNavButton(Icons.chevron_left, _goToPreviousMonth),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.18),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Text(
-            _getPeriodRange(),
-            style: const TextStyle(
-              fontSize: 11.5,
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
+        _buildPeriodSelector(),
         _buildNavButton(Icons.chevron_right, _goToNextMonth),
       ],
     );
   }
 
   Widget _buildNavButton(IconData icon, VoidCallback onTap) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.18),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
-      ),
-      child: IconButton(
-        icon: Icon(icon, color: Colors.white, size: 18),
-        onPressed: onTap,
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+    return Material(
+      color: Colors.white.withValues(alpha: 0.95),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Icon(icon, color: primaryColor, size: 18),
+        ),
       ),
     );
   }
 
   Widget _buildStatsBadge() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.12),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.calendar_view_day, size: 13, color: primaryColor),
-          const SizedBox(width: 5),
+          const Icon(Icons.calendar_view_day, size: 12, color: primaryColor),
+          const SizedBox(width: 4),
           Text(
             '${attendanceLogs.length} Hari',
             style: const TextStyle(
-              fontSize: 11.5,
+              fontSize: 10.5,
               fontWeight: FontWeight.w700,
               color: primaryColor,
             ),
@@ -326,49 +339,55 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
   }
 
   Widget _buildIconButton(IconData icon, VoidCallback onTap) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.18),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
-      ),
-      child: IconButton(
-        icon: Icon(icon, color: Colors.white, size: 18),
-        onPressed: onTap,
-        padding: const EdgeInsets.all(7),
-        constraints: const BoxConstraints(),
+    return Material(
+      color: Colors.white.withOpacity(0.22),
+      shape: const CircleBorder(),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border:
+                Border.all(color: Colors.white.withOpacity(0.45), width: 1.2),
+          ),
+          child: Icon(icon, color: Colors.white, size: 15),
+        ),
       ),
     );
   }
 
   Widget _buildFilterBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
           Expanded(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: _cardDecoration(radius: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: _cardDecoration(radius: 12),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: filterStatus,
                   isExpanded: true,
+                  isDense: true,
                   dropdownColor: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(12),
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: textDark,
                   ),
                   icon: Container(
-                    padding: const EdgeInsets.all(5),
+                    padding: const EdgeInsets.all(4),
                     decoration: const BoxDecoration(
                       color: softBlue,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.filter_list_rounded,
-                        color: primaryColor, size: 18),
+                        color: primaryColor, size: 15),
                   ),
                   items: [
                     'Semua',
@@ -399,8 +418,9 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const CircularProgressIndicator(color: primaryColor),
-            const SizedBox(height: 14),
-            Text('Memuat data...', style: TextStyle(color: textMuted)),
+            const SizedBox(height: 10),
+            Text('Memuat data...',
+                style: TextStyle(color: textMuted, fontSize: 12)),
           ],
         ),
       );
@@ -411,7 +431,13 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      // Bottom padding cukup untuk safe area saja
+      padding: EdgeInsets.fromLTRB(
+        12,
+        4,
+        12,
+        16 + MediaQuery.of(context).padding.bottom,
+      ),
       itemCount: attendanceLogs.length,
       itemBuilder: (context, index) =>
           _buildAttendanceCard(attendanceLogs[index]),
@@ -427,21 +453,21 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
         isHoliday ? Colors.red : (isDayOff ? Colors.orange : primaryColor);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(14),
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(14),
           onTap: () => _showDetailDialog(data),
           child: Container(
             decoration: _cardDecoration(),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(10),
               child: Row(
                 children: [
                   _buildDateWidget(data, isSpecial, cardAccent),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: _buildCardContent(data, isSpecial, cardAccent),
                   ),
@@ -500,18 +526,20 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
       builder: (context) => Dialog(
         backgroundColor: Colors.white,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Container(
           width: MediaQuery.of(context).size.width * 0.9,
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.85,
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               // ===== HEADER =====
               Container(
-                padding: const EdgeInsets.all(22),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
@@ -519,8 +547,8 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                     colors: [secondaryColor, primaryColor, accentColor],
                   ),
                   borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(28),
-                    topRight: Radius.circular(28),
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
                   ),
                 ),
                 child: Column(
@@ -531,24 +559,24 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                         Text(
                           data.dayName,
                           style: const TextStyle(
-                            fontSize: 19,
+                            fontSize: 16,
                             fontWeight: FontWeight.w800,
                             color: Colors.white,
                           ),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 4),
+                              horizontal: 10, vertical: 3),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(16),
                             border: Border.all(
                                 color: Colors.white.withOpacity(0.35)),
                           ),
                           child: Text(
                             data.dayTypeText,
                             style: const TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
                             ),
@@ -556,39 +584,27 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 4),
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        DateFormat('dd MMMM yyyy').format(data.date),
+                        (data.shift != null && data.shift!.isNotEmpty)
+                            ? '${DateFormat('dd MMMM yyyy').format(data.date)}  •  Shift: ${data.shift}'
+                            : DateFormat('dd MMMM yyyy').format(data.date),
                         style: const TextStyle(
-                          fontSize: 14,
+                          fontSize: 12,
                           color: Colors.white70,
                         ),
                       ),
                     ),
-                    if (data.shift != null && data.shift!.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'Shift: ${data.shift}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.white60,
-                            ),
-                          ),
-                        ),
-                      ),
                   ],
                 ),
               ),
 
               // ===== BODY =====
-              Expanded(
+              Flexible(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(12),
                   child: Column(
                     children: [
                       _buildDetailSection(
@@ -599,7 +615,7 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                         icon: Icons.login_rounded,
                         color: primaryColor,
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 10),
                       _buildDetailSection(
                         title: 'CHECK OUT',
                         time: data.checkoutTime,
@@ -611,19 +627,20 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                       if (data.timeoffName != null &&
                           data.timeoffName!.isNotEmpty)
                         Container(
-                          margin: const EdgeInsets.only(top: 16),
-                          padding: const EdgeInsets.all(14),
+                          margin: const EdgeInsets.only(top: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
                             color: softBlue,
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                                 color: primaryColor.withOpacity(0.2)),
                           ),
                           child: Row(
                             children: [
                               const Icon(Icons.event_note,
-                                  color: primaryColor, size: 20),
-                              const SizedBox(width: 12),
+                                  color: primaryColor, size: 18),
+                              const SizedBox(width: 10),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -631,12 +648,12 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                                     const Text(
                                       'Keterangan',
                                       style: TextStyle(
-                                          fontSize: 11, color: textMuted),
+                                          fontSize: 10, color: textMuted),
                                     ),
                                     Text(
                                       data.timeoffName!,
                                       style: const TextStyle(
-                                        fontSize: 13,
+                                        fontSize: 12,
                                         fontWeight: FontWeight.w700,
                                         color: primaryColor,
                                       ),
@@ -647,12 +664,13 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                             ],
                           ),
                         ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 10),
                       Container(
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
                           color: _getStatusColor(data.status).withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color:
                                 _getStatusColor(data.status).withOpacity(0.3),
@@ -663,9 +681,9 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                             Icon(
                               _getStatusIcon(data.status),
                               color: _getStatusColor(data.status),
-                              size: 28,
+                              size: 22,
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 10),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -673,12 +691,12 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                                   const Text(
                                     'Status',
                                     style: TextStyle(
-                                        fontSize: 11, color: textMuted),
+                                        fontSize: 10, color: textMuted),
                                   ),
                                   Text(
                                     data.status.toUpperCase(),
                                     style: TextStyle(
-                                      fontSize: 15,
+                                      fontSize: 13,
                                       fontWeight: FontWeight.w800,
                                       color: _getStatusColor(data.status),
                                     ),
@@ -696,7 +714,7 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
 
               // ===== CLOSE BUTTON =====
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                 decoration: const BoxDecoration(
                   border: Border(top: BorderSide(color: softBlue, width: 1.5)),
                 ),
@@ -706,17 +724,17 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                     onPressed: () => Navigator.pop(context),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,
-                      elevation: 3,
+                      elevation: 2,
                       shadowColor: primaryColor.withOpacity(0.4),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                     child: const Text(
                       'Tutup',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
@@ -731,7 +749,6 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
     );
   }
 
-  /// Fetch foto check-in & check-out dari activity attendance.
   Future<Map<String, String?>> _fetchActivityPhotos(String attendanceId) async {
     final Map<String, String?> result = {
       'checkin': null,
@@ -804,7 +821,6 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
     return result;
   }
 
-  // ===== DIALOG FOTO FULLSCREEN =====
   void _showZoomablePhoto(String base64Image, String title) {
     showDialog(
       context: context,
@@ -824,40 +840,34 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
     required IconData icon,
     required Color color,
   }) {
+    final bool hasPhoto = photoBase64 != null && photoBase64.isNotEmpty;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withOpacity(0.2)),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
               color: color.withOpacity(0.07),
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(18),
-                topRight: Radius.circular(18),
+                topLeft: Radius.circular(14),
+                topRight: Radius.circular(14),
               ),
             ),
             child: Row(
               children: [
-                Icon(icon, color: color, size: 20),
-                const SizedBox(width: 8),
+                Icon(icon, color: color, size: 16),
+                const SizedBox(width: 6),
                 Text(
                   title,
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.w800,
                     color: color,
                   ),
@@ -866,7 +876,7 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                 if (isLate && time != 'no record')
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
@@ -875,12 +885,12 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(Icons.warning_amber_rounded,
-                            size: 12, color: Colors.red),
-                        const SizedBox(width: 4),
+                            size: 11, color: Colors.red),
+                        const SizedBox(width: 3),
                         Text(
                           title == 'CHECK IN' ? 'Terlambat' : 'Pulang Cepat',
                           style: const TextStyle(
-                            fontSize: 10,
+                            fontSize: 9.5,
                             color: Colors.red,
                             fontWeight: FontWeight.w600,
                           ),
@@ -891,145 +901,106 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
               ],
             ),
           ),
-          // Content
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              child: Column(
-                children: [
-                  // Time
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Column(
-                      children: [
-                        const Text(
-                          'Waktu',
-                          style: TextStyle(fontSize: 11, color: textMuted),
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      const Text(
+                        'Waktu',
+                        style: TextStyle(fontSize: 10, color: textMuted),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        time == 'no record'
+                            ? 'Belum ada record'
+                            : _formatHHmm(time),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: time == 'no record' ? 13 : 22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1,
+                          color: time == 'no record' ? Colors.grey : color,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          time == 'no record'
-                              ? 'Belum ada record'
-                              : _formatHHmm(time),
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1,
-                            color: time == 'no record' ? Colors.grey : color,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Photo
-                  if (photoBase64 != null && photoBase64.isNotEmpty)
-                    Column(
-                      children: [
-                        const Divider(color: softBlue, thickness: 1.5),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Text(
-                              'Foto',
-                              style: TextStyle(fontSize: 11, color: textMuted),
-                            ),
-                            SizedBox(width: 4),
-                            Icon(Icons.zoom_in_rounded,
-                                size: 12, color: textMuted),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          width: 120,
-                          height: 120,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                                color: color.withOpacity(0.4), width: 2),
-                            boxShadow: [
-                              BoxShadow(
-                                color: color.withOpacity(0.15),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
+                      ),
+                      if (!hasPhoto && time != 'no record')
+                        const Padding(
+                          padding: EdgeInsets.only(top: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.no_photography,
+                                  size: 13, color: textMuted),
+                              SizedBox(width: 4),
+                              Text(
+                                'Tidak ada foto',
+                                style:
+                                    TextStyle(fontSize: 10, color: textMuted),
                               ),
                             ],
                           ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
-                            child: Stack(
-                              children: [
-                                // Foto dengan gesture tap
-                                Positioned.fill(
-                                  child: GestureDetector(
-                                    onTap: () =>
-                                        _showZoomablePhoto(photoBase64, title),
-                                    child: Hero(
-                                      tag: 'photo_$title',
-                                      child: Image.memory(
-                                        base64Decode(photoBase64),
-                                        fit: BoxFit.cover,
-                                        errorBuilder:
-                                            (context, error, stackTrace) {
-                                          return Container(
-                                            color: softBlue,
-                                            child: Icon(Icons.broken_image,
-                                                size: 40, color: textMuted),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (hasPhoto) ...[
+                  const SizedBox(width: 10),
+                  Container(
+                    width: 84,
+                    height: 84,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border:
+                          Border.all(color: color.withOpacity(0.4), width: 1.5),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: GestureDetector(
+                              onTap: () =>
+                                  _showZoomablePhoto(photoBase64, title),
+                              child: Hero(
+                                tag: 'photo_$title',
+                                child: Image.memory(
+                                  base64Decode(photoBase64),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      color: softBlue,
+                                      child: Icon(Icons.broken_image,
+                                          size: 28, color: textMuted),
+                                    );
+                                  },
                                 ),
-                                // Badge zoom di pojok kanan atas
-                                Positioned(
-                                  top: 6,
-                                  right: 6,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.55),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.zoom_out_map_rounded,
-                                      color: Colors.white,
-                                      size: 14,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    )
-                  else if (time != 'no record')
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: softBlue,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Icon(Icons.no_photography,
-                                size: 20, color: textMuted),
-                            SizedBox(width: 8),
-                            Text(
-                              'Tidak ada foto',
-                              style: TextStyle(fontSize: 12, color: textMuted),
+                          Positioned(
+                            top: 4,
+                            right: 4,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.55),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.zoom_out_map_rounded,
+                                color: Colors.white,
+                                size: 11,
+                              ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
         ],
@@ -1073,8 +1044,8 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
 
   Widget _buildDateWidget(AttendanceData data, bool isSpecial, Color accent) {
     return Container(
-      width: 66,
-      height: 66,
+      width: 48,
+      height: 48,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -1083,13 +1054,7 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
               ? [accent, accent.withOpacity(0.7)]
               : [secondaryColor, primaryColor],
         ),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-              color: accent.withOpacity(0.35),
-              blurRadius: 10,
-              offset: const Offset(0, 4)),
-        ],
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1097,12 +1062,16 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
           Text(
             data.dayNumber,
             style: const TextStyle(
-                fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                fontSize: 17,
+                height: 1.1,
+                fontWeight: FontWeight.bold,
+                color: Colors.white),
           ),
           Text(
             data.shortMonth.toUpperCase(),
             style: const TextStyle(
-                fontSize: 10,
+                fontSize: 9,
+                height: 1.1,
                 color: Colors.white70,
                 fontWeight: FontWeight.w600),
           ),
@@ -1119,20 +1088,22 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
                   Text(
                     data.dayName,
                     style: const TextStyle(
-                        fontSize: 16,
+                        fontSize: 13.5,
                         fontWeight: FontWeight.w800,
                         color: textDark),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    data.formattedDate,
-                    style: const TextStyle(fontSize: 11, color: textMuted),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      data.formattedDate,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10, color: textMuted),
+                    ),
                   ),
                 ],
               ),
@@ -1140,7 +1111,7 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
             _buildBadge(data.dayTypeText, accent),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 6),
         if (isSpecial)
           _buildSpecialDayWidget(data, accent)
         else
@@ -1151,26 +1122,26 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
 
   Widget _buildBadge(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withOpacity(0.25)),
       ),
       child: Text(
         text,
         style:
-            TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
+            TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
       ),
     );
   }
 
   Widget _buildSpecialDayWidget(AttendanceData data, Color accent) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: accent.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
@@ -1178,22 +1149,22 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
               data.dayType == DayType.holiday
                   ? Icons.celebration
                   : Icons.beach_access,
-              size: 20,
+              size: 16,
               color: accent),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               data.dayType == DayType.holiday
                   ? 'HARI LIBUR NASIONAL'
                   : 'HARI OFF',
               style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.bold, color: accent),
+                  fontSize: 11.5, fontWeight: FontWeight.bold, color: accent),
             ),
           ),
           if (data.timeoffName != null)
             Text(
               data.timeoffName!,
-              style: TextStyle(fontSize: 11, color: accent),
+              style: TextStyle(fontSize: 10, color: accent),
             ),
         ],
       ),
@@ -1206,7 +1177,7 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
         Expanded(
             child: _buildTimeCard(
                 Icons.login, 'Masuk', data.checkinTime, primaryColor)),
-        const SizedBox(width: 12),
+        const SizedBox(width: 8),
         Expanded(
             child: _buildTimeCard(
                 Icons.logout, 'Keluar', data.checkoutTime, outColor)),
@@ -1218,33 +1189,28 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
     bool hasNoRecord = time == 'no record';
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 10),
+      padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 8),
       decoration: BoxDecoration(
         color: color.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withOpacity(0.12)),
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(5),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 13, color: color),
-          ),
-          const SizedBox(width: 8),
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 6),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: const TextStyle(fontSize: 10, color: textMuted)),
+                    style: const TextStyle(
+                        fontSize: 9, height: 1.1, color: textMuted)),
                 Text(
                   hasNoRecord ? 'Belum absen' : _formatHHmm(time),
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 12,
+                    height: 1.2,
                     fontWeight: FontWeight.w800,
                     color: hasNoRecord ? Colors.grey : color,
                   ),
@@ -1264,25 +1230,25 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(28),
+            padding: const EdgeInsets.all(20),
             decoration: const BoxDecoration(
               color: softBlue,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.history_edu, size: 64, color: accentColor),
+            child: const Icon(Icons.history_edu, size: 44, color: accentColor),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           const Text(
             'Belum Ada Data Absensi',
             style: TextStyle(
-                fontSize: 18, fontWeight: FontWeight.w700, color: textDark),
+                fontSize: 15, fontWeight: FontWeight.w700, color: textDark),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
             'Periode ${_getPeriodName()}',
-            style: const TextStyle(fontSize: 14, color: textMuted),
+            style: const TextStyle(fontSize: 12, color: textMuted),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () {
               setState(() => selectedMonth = DateTime.now());
@@ -1291,15 +1257,15 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryColor,
-              elevation: 3,
+              elevation: 2,
               shadowColor: primaryColor.withOpacity(0.4),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
-              padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 13),
+                  borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 9),
             ),
             child: const Text('Tampilkan Bulan Ini',
                 style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: Colors.white)),
           ),
@@ -1333,9 +1299,9 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
       context: context,
       builder: (context) => Dialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Container(
-          padding: const EdgeInsets.all(22),
+          padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1343,36 +1309,37 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
                       color: softBlue,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(Icons.calendar_month_rounded,
-                        color: primaryColor, size: 18),
+                        color: primaryColor, size: 16),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   const Text('Pilih Periode',
                       style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 16,
                           fontWeight: FontWeight.w800,
                           color: secondaryColor)),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
                   color: softBlue,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
                     value: selectedYear,
                     isExpanded: true,
+                    isDense: true,
                     dropdownColor: Colors.white,
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: textDark,
                     ),
@@ -1386,21 +1353,22 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               GridView.builder(
                 shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  childAspectRatio: 1.5,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
+                  crossAxisCount: 4,
+                  childAspectRatio: 1.7,
+                  crossAxisSpacing: 6,
+                  mainAxisSpacing: 6,
                 ),
                 itemCount: 12,
                 itemBuilder: (context, index) {
                   int monthIndex = index + 1;
                   bool isSelected = monthIndex == selectedMonthIndex;
                   return InkWell(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                     onTap: () => Navigator.pop(
                         context, DateTime(selectedYear, monthIndex, 1)),
                     child: Container(
@@ -1413,21 +1381,13 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                               )
                             : null,
                         color: isSelected ? null : softBlue,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: primaryColor.withOpacity(0.35),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ]
-                            : null,
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Center(
                         child: Text(
                           months[index],
                           style: TextStyle(
+                            fontSize: 12,
                             color: isSelected ? Colors.white : textDark,
                             fontWeight:
                                 isSelected ? FontWeight.bold : FontWeight.w500,
@@ -1438,7 +1398,7 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
                   );
                 },
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 6),
               TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: const Text('Batal',
@@ -1527,10 +1487,8 @@ class _ZoomablePhotoViewerState extends State<_ZoomablePhotoViewer>
     final currentScale = _transformController.value.getMaxScaleOnAxis();
 
     if (currentScale > 1.0) {
-      // Zoom out ke normal
       _animateTo(Matrix4.identity());
     } else {
-      // Zoom in ke 2.5x di posisi tap
       const scale = 2.5;
       final position = _doubleTapDetails!.localPosition;
 
@@ -1558,7 +1516,6 @@ class _ZoomablePhotoViewerState extends State<_ZoomablePhotoViewer>
       backgroundColor: Colors.black,
       child: Stack(
         children: [
-          // ===== FOTO ZOOMABLE =====
           Positioned.fill(
             child: GestureDetector(
               onDoubleTapDown: (details) => _doubleTapDetails = details,
@@ -1597,8 +1554,6 @@ class _ZoomablePhotoViewerState extends State<_ZoomablePhotoViewer>
               ),
             ),
           ),
-
-          // ===== TOMBOL CLOSE =====
           Positioned(
             top: 40,
             right: 16,
@@ -1617,8 +1572,6 @@ class _ZoomablePhotoViewerState extends State<_ZoomablePhotoViewer>
               ),
             ),
           ),
-
-          // ===== LABEL TITLE =====
           Positioned(
             top: 48,
             left: 20,
@@ -1641,8 +1594,6 @@ class _ZoomablePhotoViewerState extends State<_ZoomablePhotoViewer>
               ),
             ),
           ),
-
-          // ===== HINT =====
           Positioned(
             bottom: 40,
             left: 0,

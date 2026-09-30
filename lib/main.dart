@@ -1,32 +1,41 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'welcome_page.dart';
-import 'package:camera/camera.dart';
+import 'attendance_home.dart';
 
-// ==== Tambahkan ini (global variable kamera) ====
-List<CameraDescription> cameras = [];
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized(); // WAJIB
+  // Cek status login
+  final prefs = await SharedPreferences.getInstance();
+  final empid = prefs.getString('empid') ?? '';
+  final isLoggedIn = empid.isNotEmpty;
 
-  // Load semua kamera dari device
-  cameras = await availableCameras(); // WAJIB
-
-  runApp(const MyApp());
+  runApp(GmtApp(isLoggedIn: isLoggedIn));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class GmtApp extends StatelessWidget {
+  final bool isLoggedIn;
+
+  const GmtApp({super.key, required this.isLoggedIn});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'GMT Attendance',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        fontFamily: 'Inter',
-      ),
-      home: const WelcomePage(),
+      title: 'GMT ATTENDANCE',
       debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        scaffoldBackgroundColor: const Color(0xFFF0F4F8),
+        fontFamily: 'Inter',
+        useMaterial3: true,
+        colorScheme: const ColorScheme.light(
+          primary: Color(0xFF1E88E5),
+          secondary: Color(0xFF0D47A1),
+          surface: Color(0xFFF0F4F8),
+        ),
+      ),
+      home: isLoggedIn ? const HomePage() : const WelcomePage(),
     );
   }
 }
