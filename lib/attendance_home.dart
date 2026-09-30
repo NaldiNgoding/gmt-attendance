@@ -11,36 +11,6 @@ import 'profile_page.dart';
 import 'lembur.dart';
 import 'package:flutter/cupertino.dart';
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  static const Color kPrimary = Color(0xFF1E88E5);
-  static const Color kSecondary = Color(0xFF0D47A1);
-  static const Color kSuccess = Color(0xFF4CAF50);
-  static const Color kWarning = Color(0xFFFF9800);
-  static const Color kError = Color(0xFFF44336);
-  static const Color kSurface = Color(0xFFF0F4F8); // Soft blue surface
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'GMT ATTENDANCE',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        scaffoldBackgroundColor: kSurface,
-        fontFamily: 'Inter',
-        useMaterial3: true,
-        colorScheme: ColorScheme.light(
-          primary: kPrimary,
-          secondary: kSecondary,
-          surface: kSurface,
-        ),
-      ),
-      home: const HomePage(),
-    );
-  }
-}
-
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
