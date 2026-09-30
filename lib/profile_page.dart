@@ -1,14 +1,22 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'welcome_page.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'welcome_page.dart';
+import 'attendance_home.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Profile Page
-//  Aesthetic: Refined corporate — deep navy hero, crisp white cards,
-//             geometric diagonal clip, staggered entrance animations.
+//  Profile Page — Backend-driven
+//  Data source:
+//   - GET /api/getemployeebyid?id=<empid>           → personal
+//   - GET /api/getemploymentinfobyid?id=<empid>     → employment
 // ─────────────────────────────────────────────────────────────────────────────
+
+const String _kBaseUrl = "http://localhost:8000";
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -19,7 +27,7 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage>
     with TickerProviderStateMixin {
-  // ── palette (matches HomePage) ────────────────────────────────────────────
+  // ── palette ───────────────────────────────────────────────────────────────
   static const _navy = Color.fromARGB(255, 6, 70, 148);
   static const _navyDeep = Color(0xFF021F47);
   static const _surface = Color(0xFFF7F8FA);
@@ -28,12 +36,12 @@ class _ProfilePageState extends State<ProfilePage>
   static const _accent = Color(0xFF9E6CC8);
   static const _gold = Color(0xFFD4A853);
 
-  // ── user data ─────────────────────────────────────────────────────────────
-  String _name = '';
-  String _userId = '';
-  String _empId = '';
-  String _account = '';
-  bool _loaded = false;
+  // ── state ─────────────────────────────────────────────────────────────────
+  Map<String, dynamic>? _personal;   // dari getemployeebyid
+  Map<String, dynamic>? _employment; // dari getemploymentinfobyid
+  String _empid = '';
+  bool _loading = true;
+  String? _error;
 
   // ── animations ────────────────────────────────────────────────────────────
   late final AnimationController _masterCtrl;
@@ -43,32 +51,149 @@ class _ProfilePageState extends State<ProfilePage>
   late final Animation<double> _headerFade;
   late final Animation<double> _avatarScale;
 
-  // ── scroll ────────────────────────────────────────────────────────────────
   final _scroll = ScrollController();
-  double _headerElevation = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
     _initAnimations();
-    _scroll.addListener(() {
-      final e = (_scroll.offset / 60).clamp(0.0, 1.0);
-      if (e != _headerElevation) setState(() => _headerElevation = e);
-    });
+    _loadAll();
   }
 
-  Future<void> _loadData() async {
-    final prefs = await SharedPreferences.getInstance();
+  @override
+  void dispose() {
+    _masterCtrl.dispose();
+    _avatarPulse.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  // ── DATA LOADING ──────────────────────────────────────────────────────────
+  Future<void> _loadAll() async {
     setState(() {
-      _name = prefs.getString('empname') ?? 'Employee';
-      _userId = prefs.getString('userid') ?? '-';
-      _empId = prefs.getString('empid') ?? '-';
-      _account = prefs.getString('username') ?? '-';
-      _loaded = true;
+      _loading = true;
+      _error = null;
+    });
+
+    final prefs = await SharedPreferences.getInstance();
+    final empid = prefs.getString('empid') ?? '';
+
+    if (empid.isEmpty) {
+      setState(() {
+        _loading = false;
+        _error = 'EmpID tidak ditemukan. Silakan login ulang.';
+      });
+      return;
+    }
+
+    _empid = empid;
+
+    // Fetch paralel biar cepat
+    final results = await Future.wait([
+      _fetchJson("$_kBaseUrl/api/getemployeebyid?id=$empid"),
+      _fetchJson("$_kBaseUrl/api/getemploymentinfobyid?id=$empid"),
+    ]);
+
+    if (!mounted) return;
+
+    final personalRes = results[0];
+    final employmentRes = results[1];
+
+    if (personalRes == null) {
+      setState(() {
+        _loading = false;
+        _error = 'Gagal memuat data karyawan dari server.';
+      });
+      return;
+    }
+
+    setState(() {
+      _personal = _firstItem(personalRes);
+      _employment = _firstItem(employmentRes);
+      _loading = false;
     });
   }
 
+  /// GET JSON, return Map response atau null kalau gagal
+  Future<Map<String, dynamic>?> _fetchJson(String url) async {
+    try {
+      debugPrint("[Profile] GET $url");
+      final res = await http
+          .get(Uri.parse(url), headers: {'Accept': 'application/json'})
+          .timeout(const Duration(seconds: 15));
+
+      debugPrint("[Profile] status=${res.statusCode}");
+      if (res.statusCode != 200) return null;
+
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    } catch (e, st) {
+      debugPrint("[Profile] error: $e\n$st");
+      return null;
+    }
+  }
+
+  /// Ambil item pertama dari response (data bisa List atau Map)
+  Map<String, dynamic>? _firstItem(Map<String, dynamic>? res) {
+    if (res == null) return null;
+    final data = res['data'];
+    if (data is List && data.isNotEmpty) {
+      return Map<String, dynamic>.from(data.first);
+    }
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    return null;
+  }
+
+  // ── getters helpers ───────────────────────────────────────────────────────
+  String _p(String key, [String fallback = '-']) {
+    final v = _personal?[key];
+    if (v == null) return fallback;
+    final s = v.toString().trim();
+    return s.isEmpty ? fallback : s;
+  }
+
+  String _e(String key, [String fallback = '-']) {
+    final v = _employment?[key];
+    if (v == null) return fallback;
+    final s = v.toString().trim();
+    return s.isEmpty ? fallback : s;
+  }
+
+  String get _name => _p('nama', 'Employee');
+  String get _nik => _p('nik');
+  String get _email => _p('email');
+  String get _telp => _p('telp');
+  String get _gender => _p('gender');
+  String get _agama => _p('agama');
+  String get _golDarah => _p('golongan_darah');
+  String get _statusKawin => _p('status_kawin');
+  String get _alamat =>
+      _p('address', _p('alamat_kini1', _p('alamat_kini2', '-')));
+
+  String get _joinDate {
+    final raw = _p('tglmsk');
+    if (raw == '-' || raw.isEmpty) return '-';
+    try {
+      final dt = DateTime.parse(raw);
+      return DateFormat('dd MMM yyyy').format(dt);
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  String get _initials {
+    final parts = _name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2 && parts[0].isNotEmpty && parts[1].isNotEmpty) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    if (parts.isNotEmpty && parts[0].isNotEmpty) {
+      return parts[0][0].toUpperCase();
+    }
+    return 'U';
+  }
+
+  // ── ANIMATIONS ────────────────────────────────────────────────────────────
   void _initAnimations() {
     _masterCtrl = AnimationController(
       vsync: this,
@@ -92,14 +217,13 @@ class _ProfilePageState extends State<ProfilePage>
       ),
     );
 
-    // 5 staggered card groups
     _cardFades = List.generate(5, (i) {
       final start = 0.30 + i * 0.10;
       return Tween<double>(begin: 0.0, end: 1.0).animate(
         CurvedAnimation(
           parent: _masterCtrl,
-          curve: Interval(start, (start + 0.25).clamp(0.0, 1.0),
-              curve: Curves.easeOut),
+          curve: Interval(
+              start, (start + 0.25).clamp(0.0, 1.0), curve: Curves.easeOut),
         ),
       );
     });
@@ -109,8 +233,8 @@ class _ProfilePageState extends State<ProfilePage>
           .animate(
         CurvedAnimation(
           parent: _masterCtrl,
-          curve: Interval(start, (start + 0.28).clamp(0.0, 1.0),
-              curve: Curves.easeOutCubic),
+          curve: Interval(
+              start, (start + 0.28).clamp(0.0, 1.0), curve: Curves.easeOutCubic),
         ),
       );
     });
@@ -118,194 +242,22 @@ class _ProfilePageState extends State<ProfilePage>
     _masterCtrl.forward();
   }
 
-  @override
-  void dispose() {
-    _masterCtrl.dispose();
-    _avatarPulse.dispose();
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  // ── initials helper ───────────────────────────────────────────────────────
-  String get _initials {
-    final parts = _name.trim().split(' ');
-    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    if (parts.isNotEmpty && parts[0].isNotEmpty)
-      return parts[0][0].toUpperCase();
-    return 'U';
-  }
-
-  // ── build ─────────────────────────────────────────────────────────────────
+  // ── BUILD ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _surface,
       body: Stack(
         children: [
-          CustomScrollView(
-            controller: _scroll,
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              // ── Hero header ───────────────────────────────────────────────
-              SliverToBoxAdapter(child: _buildHero()),
+          // ── Main content ──────────────────────────────────────────────
+          if (_loading)
+            const Center(child: CircularProgressIndicator(color: _navy))
+          else if (_error != null)
+            _buildError()
+          else
+            _buildContent(),
 
-              // ── Stats row ─────────────────────────────────────────────────
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                sliver: SliverToBoxAdapter(
-                  child: _Animated(
-                      fade: _cardFades[0],
-                      slide: _cardSlides[0],
-                      child: _buildStats()),
-                ),
-              ),
-
-              // ── Info card ─────────────────────────────────────────────────
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                sliver: SliverToBoxAdapter(
-                  child: _Animated(
-                    fade: _cardFades[1],
-                    slide: _cardSlides[1],
-                    child: _SectionCard(
-                      title: 'Account Info',
-                      icon: Icons.badge_rounded,
-                      iconColor: _navy,
-                      children: [
-                        _InfoRow(
-                            icon: Icons.person_pin_circle_rounded,
-                            label: 'Full Name',
-                            value: _name,
-                            color: _navy),
-                        _InfoRow(
-                            icon: Icons.fingerprint_rounded,
-                            label: 'Employee ID',
-                            value: _empId,
-                            color: _success),
-                        _InfoRow(
-                            icon: Icons.tag_rounded,
-                            label: 'User ID',
-                            value: _userId,
-                            color: _warning),
-                        _InfoRow(
-                            icon: Icons.alternate_email_rounded,
-                            label: 'Account',
-                            value: _account,
-                            color: _accent,
-                            isLast: true),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // ── Work info card ────────────────────────────────────────────
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                sliver: SliverToBoxAdapter(
-                  child: _Animated(
-                    fade: _cardFades[2],
-                    slide: _cardSlides[2],
-                    child: _SectionCard(
-                      title: 'Work Details',
-                      icon: Icons.work_rounded,
-                      iconColor: _accent,
-                      children: [
-                        _InfoRow(
-                            icon: Icons.business_rounded,
-                            label: 'Department',
-                            value: 'General',
-                            color: _navy),
-                        _InfoRow(
-                            icon: Icons.location_city_rounded,
-                            label: 'Office',
-                            value: 'Jakarta HQ',
-                            color: _success),
-                        _InfoRow(
-                            icon: Icons.schedule_rounded,
-                            label: 'Shift',
-                            value: '08:30 – 17:30',
-                            color: _warning,
-                            isLast: true),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // ── Settings card ─────────────────────────────────────────────
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                sliver: SliverToBoxAdapter(
-                  child: _Animated(
-                    fade: _cardFades[3],
-                    slide: _cardSlides[3],
-                    child: _SectionCard(
-                      title: 'Preferences',
-                      icon: Icons.tune_rounded,
-                      iconColor: _warning,
-                      children: [
-                        _SettingRow(
-                            icon: Icons.notifications_rounded,
-                            label: 'Notifications',
-                            color: _navy,
-                            onTap: () {}),
-                        _SettingRow(
-                            icon: Icons.lock_rounded,
-                            label: 'Security & Privacy',
-                            color: _accent,
-                            onTap: () {}),
-                        _SettingRow(
-                            icon: Icons.language_rounded,
-                            label: 'Language',
-                            color: _success,
-                            onTap: () {}),
-                        _SettingRow(
-                            icon: Icons.help_rounded,
-                            label: 'Help Center',
-                            color: _warning,
-                            isLast: true,
-                            onTap: () {}),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // ── Logout ────────────────────────────────────────────────────
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                sliver: SliverToBoxAdapter(
-                  child: _Animated(
-                    fade: _cardFades[4],
-                    slide: _cardSlides[4],
-                    child: _LogoutButton(onTap: _confirmLogout),
-                  ),
-                ),
-              ),
-
-              // ── App version footer ────────────────────────────────────────
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 50),
-                sliver: SliverToBoxAdapter(
-                  child: FadeTransition(
-                    opacity: _cardFades[4],
-                    child: Center(
-                      child: Text(
-                        'GMT Attendance • v1.0.0',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade400,
-                            letterSpacing: 0.8),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          // ── Floating back button (top-left) ───────────────────────────────
+          // ── Floating back button ──────────────────────────────────────
           Positioned(
             top: MediaQuery.of(context).padding.top + 10,
             left: 16,
@@ -319,7 +271,260 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // ── Hero ──────────────────────────────────────────────────────────────────
+  Widget _buildError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.cloud_off_rounded,
+                  size: 40, color: Colors.red.shade400),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _loadAll,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Coba Lagi'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _navy,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    return CustomScrollView(
+      controller: _scroll,
+      physics: const BouncingScrollPhysics(),
+      slivers: [
+        SliverToBoxAdapter(child: _buildHero()),
+
+        // ── Stats row ─────────────────────────────────────────────────
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+          sliver: SliverToBoxAdapter(
+            child: _Animated(
+              fade: _cardFades[0],
+              slide: _cardSlides[0],
+              child: _buildStats(),
+            ),
+          ),
+        ),
+
+        // ── Account Info ──────────────────────────────────────────────
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          sliver: SliverToBoxAdapter(
+            child: _Animated(
+              fade: _cardFades[1],
+              slide: _cardSlides[1],
+              child: _SectionCard(
+                title: 'Account Info',
+                icon: Icons.badge_rounded,
+                iconColor: _navy,
+                children: [
+                  _InfoRow(
+                    icon: Icons.person_pin_circle_rounded,
+                    label: 'Full Name',
+                    value: _name,
+                    color: _navy,
+                  ),
+                  _InfoRow(
+                    icon: Icons.fingerprint_rounded,
+                    label: 'NIK',
+                    value: _nik,
+                    color: _success,
+                  ),
+                  _InfoRow(
+                    icon: Icons.email_rounded,
+                    label: 'Email',
+                    value: _email,
+                    color: _warning,
+                  ),
+                  _InfoRow(
+                    icon: Icons.phone_rounded,
+                    label: 'Telephone',
+                    value: _telp,
+                    color: _accent,
+                    isLast: true,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        // ── Work Details ──────────────────────────────────────────────
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          sliver: SliverToBoxAdapter(
+            child: _Animated(
+              fade: _cardFades[2],
+              slide: _cardSlides[2],
+              child: _SectionCard(
+                title: 'Work Details',
+                icon: Icons.work_rounded,
+                iconColor: _accent,
+                children: [
+                  _InfoRow(
+                    icon: Icons.business_rounded,
+                    label: 'Company',
+                    value: _e('name'),
+                    color: _navy,
+                  ),
+                  _InfoRow(
+                    icon: Icons.apartment_rounded,
+                    label: 'Department',
+                    value: _e('dept_name'),
+                    color: _success,
+                  ),
+                  _InfoRow(
+                    icon: Icons.work_history_rounded,
+                    label: 'Position',
+                    value: _e('jobpositionname'),
+                    color: _warning,
+                  ),
+                  _InfoRow(
+                    icon: Icons.military_tech_rounded,
+                    label: 'Job Level',
+                    value: _e('joblevelname'),
+                    color: _accent,
+                  ),
+                  _InfoRow(
+                    icon: Icons.location_city_rounded,
+                    label: 'Depo',
+                    value: _e('nama_depo'),
+                    color: _navy,
+                  ),
+                  _InfoRow(
+                    icon: Icons.event_available_rounded,
+                    label: 'Join Date',
+                    value: _joinDate,
+                    color: _success,
+                  ),
+                  _InfoRow(
+                    icon: Icons.verified_user_rounded,
+                    label: 'Status',
+                    value: _e('emp_status'),
+                    color: _warning,
+                    isLast: true,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        // ── Personal Details ──────────────────────────────────────────
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          sliver: SliverToBoxAdapter(
+            child: _Animated(
+              fade: _cardFades[3],
+              slide: _cardSlides[3],
+              child: _SectionCard(
+                title: 'Personal Details',
+                icon: Icons.person_rounded,
+                iconColor: _warning,
+                children: [
+                  _InfoRow(
+                    icon: Icons.wc_rounded,
+                    label: 'Gender',
+                    value: _gender,
+                    color: _navy,
+                  ),
+                  _InfoRow(
+                    icon: Icons.church_rounded,
+                    label: 'Religion',
+                    value: _agama,
+                    color: _accent,
+                  ),
+                  _InfoRow(
+                    icon: Icons.bloodtype_rounded,
+                    label: 'Blood Type',
+                    value: _golDarah,
+                    color: _success,
+                  ),
+                  _InfoRow(
+                    icon: Icons.favorite_rounded,
+                    label: 'Marital Status',
+                    value: _statusKawin,
+                    color: _warning,
+                  ),
+                  _InfoRow(
+                    icon: Icons.home_rounded,
+                    label: 'Address',
+                    value: _alamat,
+                    color: _navy,
+                    isLast: true,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        // ── Logout ────────────────────────────────────────────────────
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          sliver: SliverToBoxAdapter(
+            child: _Animated(
+              fade: _cardFades[4],
+              slide: _cardSlides[4],
+              child: _LogoutButton(onTap: _confirmLogout),
+            ),
+          ),
+        ),
+
+        // ── Footer ────────────────────────────────────────────────────
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 50),
+          sliver: SliverToBoxAdapter(
+            child: FadeTransition(
+              opacity: _cardFades[4],
+              child: Center(
+                child: Text(
+                  'GMT Attendance • v1.0.0',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade400,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── HERO ──────────────────────────────────────────────────────────────────
   Widget _buildHero() {
     return AnimatedBuilder(
       animation: Listenable.merge([_masterCtrl, _avatarPulse]),
@@ -329,7 +534,7 @@ class _ProfilePageState extends State<ProfilePage>
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              // ── Diagonal clip background ────────────────────────────────
+              // Diagonal clip background
               ClipPath(
                 clipper: _DiagonalClipper(),
                 child: Container(
@@ -344,7 +549,6 @@ class _ProfilePageState extends State<ProfilePage>
                   ),
                   child: Stack(
                     children: [
-                      // Geometric circles (decorative)
                       Positioned(
                         top: -40,
                         right: -40,
@@ -352,10 +556,12 @@ class _ProfilePageState extends State<ProfilePage>
                           width: 180,
                           height: 180,
                           decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                  color: Colors.white.withOpacity(0.06),
-                                  width: 1)),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.06),
+                              width: 1,
+                            ),
+                          ),
                         ),
                       ),
                       Positioned(
@@ -365,10 +571,12 @@ class _ProfilePageState extends State<ProfilePage>
                           width: 90,
                           height: 90,
                           decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                  color: Colors.white.withOpacity(0.04),
-                                  width: 1)),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.04),
+                              width: 1,
+                            ),
+                          ),
                         ),
                       ),
                       Positioned(
@@ -378,32 +586,31 @@ class _ProfilePageState extends State<ProfilePage>
                           width: 120,
                           height: 120,
                           decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withOpacity(0.03)),
+                            shape: BoxShape.circle,
+                            color: Colors.white.withOpacity(0.03),
+                          ),
                         ),
                       ),
-                      // Dot grid pattern
                       Positioned.fill(
-                          child: CustomPaint(painter: _DotGridPainter())),
+                        child: CustomPaint(painter: _DotGridPainter()),
+                      ),
                     ],
                   ),
                 ),
               ),
 
-              // ── Text content (inside header area) ───────────────────────
+              // Text content
               Positioned(
                 top: MediaQuery.of(context).padding.top + 56,
                 left: 0,
                 right: 0,
                 child: Column(
                   children: [
-                    // Avatar
                     ScaleTransition(
                       scale: _avatarScale,
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
-                          // Pulsing ring
                           Transform.scale(
                             scale: 0.92 + (_avatarPulse.value * 0.08),
                             child: Container(
@@ -419,7 +626,6 @@ class _ProfilePageState extends State<ProfilePage>
                               ),
                             ),
                           ),
-                          // Outer ring
                           Container(
                             width: 88,
                             height: 88,
@@ -428,13 +634,13 @@ class _ProfilePageState extends State<ProfilePage>
                               border: Border.all(color: _gold, width: 2.5),
                               boxShadow: [
                                 BoxShadow(
-                                    color: _gold.withOpacity(0.3),
-                                    blurRadius: 16,
-                                    spreadRadius: 2),
+                                  color: _gold.withOpacity(0.3),
+                                  blurRadius: 16,
+                                  spreadRadius: 2,
+                                ),
                               ],
                             ),
                           ),
-                          // Avatar circle
                           Container(
                             width: 80,
                             height: 80,
@@ -443,7 +649,10 @@ class _ProfilePageState extends State<ProfilePage>
                               gradient: const LinearGradient(
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
-                                colors: [Color(0xFF1A5BBD), Color(0xFF0D3A7A)],
+                                colors: [
+                                  Color(0xFF1A5BBD),
+                                  Color(0xFF0D3A7A),
+                                ],
                               ),
                             ),
                             child: Center(
@@ -458,7 +667,6 @@ class _ProfilePageState extends State<ProfilePage>
                               ),
                             ),
                           ),
-                          // Online badge
                           Positioned(
                             bottom: 4,
                             right: 4,
@@ -478,7 +686,7 @@ class _ProfilePageState extends State<ProfilePage>
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      _loaded ? _name : '...',
+                      _name,
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
@@ -494,10 +702,12 @@ class _ProfilePageState extends State<ProfilePage>
                         color: Colors.white.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                            color: Colors.white.withOpacity(0.18), width: 1),
+                          color: Colors.white.withOpacity(0.18),
+                          width: 1,
+                        ),
                       ),
                       child: Text(
-                        _loaded ? _account : '...',
+                        _e('jobpositionname', 'Employee'),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -510,7 +720,6 @@ class _ProfilePageState extends State<ProfilePage>
                 ),
               ),
 
-              // ── Bottom spacer for the card overlap ──────────────────────
               SizedBox(height: 260 + 16),
             ],
           ),
@@ -519,7 +728,7 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
+  // ── STATS (dummy, karena belum ada API absensi) ───────────────────────────
   Widget _buildStats() {
     return Transform.translate(
       offset: const Offset(0, -20),
@@ -530,37 +739,41 @@ class _ProfilePageState extends State<ProfilePage>
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.07),
-                blurRadius: 20,
-                offset: const Offset(0, 8)),
+              color: Colors.black.withOpacity(0.07),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
           ],
         ),
         child: Row(
           children: [
             _StatCell(
-                value: '22',
-                label: 'Hadir',
-                color: _success,
-                icon: CupertinoIcons.checkmark_circle_fill),
+              value: '-',
+              label: 'Hadir',
+              color: _success,
+              icon: CupertinoIcons.checkmark_circle_fill,
+            ),
             _StatDivider(),
             _StatCell(
-                value: '3',
-                label: 'Cuti',
-                color: _warning,
-                icon: CupertinoIcons.calendar_badge_minus),
+              value: '-',
+              label: 'Cuti',
+              color: _warning,
+              icon: CupertinoIcons.calendar_badge_minus,
+            ),
             _StatDivider(),
             _StatCell(
-                value: '5',
-                label: 'Lembur',
-                color: _accent,
-                icon: CupertinoIcons.timer_fill),
+              value: '-',
+              label: 'Lembur',
+              color: _accent,
+              icon: CupertinoIcons.timer_fill,
+            ),
           ],
         ),
       ),
     );
   }
 
-  // ── Logout confirm ────────────────────────────────────────────────────────
+  // ── LOGOUT ────────────────────────────────────────────────────────────────
   void _confirmLogout() {
     showModalBottomSheet(
       context: context,
@@ -575,17 +788,21 @@ class _ProfilePageState extends State<ProfilePage>
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2))),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
             const SizedBox(height: 24),
             Container(
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                  color: Colors.red.shade50, shape: BoxShape.circle),
+                color: Colors.red.shade50,
+                shape: BoxShape.circle,
+              ),
               child: Icon(Icons.logout_rounded,
                   color: Colors.red.shade400, size: 28),
             ),
@@ -597,7 +814,10 @@ class _ProfilePageState extends State<ProfilePage>
               'Anda akan keluar dari akun ini.\nData akan tetap tersimpan.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  fontSize: 14, color: Colors.grey.shade600, height: 1.5),
+                fontSize: 14,
+                color: Colors.grey.shade600,
+                height: 1.5,
+              ),
             ),
             const SizedBox(height: 28),
             Row(
@@ -611,39 +831,37 @@ class _ProfilePageState extends State<ProfilePage>
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: const Text('Batal',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87)),
+                    child: const Text(
+                      'Batal',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () async {
-                      Navigator.pop(context); // tutup bottom sheet
-                      // Hapus semua data sesi
+                      Navigator.pop(context);
                       final prefs = await SharedPreferences.getInstance();
                       await prefs.clear();
-                      // Navigasi ke WelcomePage, hapus semua route sebelumnya
                       if (context.mounted) {
                         Navigator.of(context).pushAndRemoveUntil(
                           PageRouteBuilder(
                             pageBuilder: (_, animation, __) =>
                                 const WelcomePage(),
-                            transitionsBuilder: (_, animation, __, child) {
-                              return FadeTransition(
-                                opacity: CurvedAnimation(
-                                  parent: animation,
-                                  curve: Curves.easeOut,
-                                ),
-                                child: child,
-                              );
-                            },
+                            transitionsBuilder: (_, animation, __, child) =>
+                                FadeTransition(
+                              opacity: CurvedAnimation(
+                                  parent: animation, curve: Curves.easeOut),
+                              child: child,
+                            ),
                             transitionDuration:
                                 const Duration(milliseconds: 700),
                           ),
-                          (route) => false, // hapus semua route
+                          (route) => false,
                         );
                       }
                     },
@@ -655,8 +873,10 @@ class _ProfilePageState extends State<ProfilePage>
                           borderRadius: BorderRadius.circular(14)),
                       elevation: 0,
                     ),
-                    child: const Text('Log Out',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: const Text(
+                      'Log Out',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ),
               ],
@@ -692,7 +912,12 @@ class _BackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.pop(context),
+      onTap: () {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const HomePage()),
+          (route) => false,
+        );
+      },
       child: Container(
         width: 40,
         height: 40,
@@ -701,8 +926,8 @@ class _BackButton extends StatelessWidget {
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white.withOpacity(0.25), width: 1),
         ),
-        child:
-            const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 18),
+        child: const Icon(Icons.arrow_back_rounded,
+            color: Colors.white, size: 18),
       ),
     );
   }
@@ -713,11 +938,12 @@ class _StatCell extends StatelessWidget {
   final String value, label;
   final Color color;
   final IconData icon;
-  const _StatCell(
-      {required this.value,
-      required this.label,
-      required this.color,
-      required this.icon});
+  const _StatCell({
+    required this.value,
+    required this.label,
+    required this.color,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -728,19 +954,25 @@ class _StatCell extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-                color: color.withOpacity(0.10), shape: BoxShape.circle),
+              color: color.withOpacity(0.10),
+              shape: BoxShape.circle,
+            ),
             child: Icon(icon, color: color, size: 20),
           ),
           const SizedBox(height: 8),
           Text(value,
               style: TextStyle(
-                  fontSize: 22, fontWeight: FontWeight.w800, color: color)),
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: color,
+              )),
           const SizedBox(height: 2),
           Text(label,
               style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey.shade500,
-                  fontWeight: FontWeight.w500)),
+                fontSize: 11,
+                color: Colors.grey.shade500,
+                fontWeight: FontWeight.w500,
+              )),
         ],
       ),
     );
@@ -760,11 +992,12 @@ class _SectionCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final List<Widget> children;
-  const _SectionCard(
-      {required this.title,
-      required this.icon,
-      required this.iconColor,
-      required this.children});
+  const _SectionCard({
+    required this.title,
+    required this.icon,
+    required this.iconColor,
+    required this.children,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -774,15 +1007,15 @@ class _SectionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 16,
-              offset: const Offset(0, 6))
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
             child: Row(
@@ -791,21 +1024,22 @@ class _SectionCard extends StatelessWidget {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                      color: iconColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8)),
+                    color: iconColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   child: Icon(icon, color: iconColor, size: 16),
                 ),
                 const SizedBox(width: 10),
                 Text(title,
                     style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.2)),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.2,
+                    )),
               ],
             ),
           ),
           Divider(color: Colors.grey.shade100, height: 1),
-          // Children
           ...children,
         ],
       ),
@@ -819,12 +1053,13 @@ class _InfoRow extends StatelessWidget {
   final String label, value;
   final Color color;
   final bool isLast;
-  const _InfoRow(
-      {required this.icon,
-      required this.label,
-      required this.value,
-      required this.color,
-      this.isLast = false});
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    this.isLast = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -838,28 +1073,37 @@ class _InfoRow extends StatelessWidget {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                    color: color.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(10)),
+                  color: color.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 child: Icon(icon, color: color, size: 16),
               ),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label,
-                      style: TextStyle(
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: TextStyle(
                           fontSize: 11,
                           color: Colors.grey.shade500,
-                          fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 2),
-                  Text(value,
+                          fontWeight: FontWeight.w500,
+                        )),
+                    const SizedBox(height: 2),
+                    Text(
+                      value,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87)),
-                ],
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               GestureDetector(
                 onTap: () {
                   Clipboard.setData(ClipboardData(text: value));
@@ -878,58 +1122,6 @@ class _InfoRow extends StatelessWidget {
                     size: 14, color: Colors.grey.shade400),
               ),
             ],
-          ),
-        ),
-        if (!isLast)
-          Divider(color: Colors.grey.shade100, height: 1, indent: 62),
-      ],
-    );
-  }
-}
-
-// ── Setting row ───────────────────────────────────────────────────────────────
-class _SettingRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-  final bool isLast;
-  const _SettingRow(
-      {required this.icon,
-      required this.label,
-      required this.color,
-      required this.onTap,
-      this.isLast = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-            child: Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                      color: color.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(10)),
-                  child: Icon(icon, color: color, size: 16),
-                ),
-                const SizedBox(width: 12),
-                Text(label,
-                    style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87)),
-                const Spacer(),
-                Icon(Icons.chevron_right_rounded,
-                    color: Colors.grey.shade400, size: 20),
-              ],
-            ),
           ),
         ),
         if (!isLast)
@@ -972,21 +1164,23 @@ class _LogoutButtonState extends State<_LogoutButton> {
             border: Border.all(color: Colors.red.shade100, width: 1.5),
             boxShadow: [
               BoxShadow(
-                  color: Colors.red.withOpacity(0.06),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4))
+                color: Colors.red.withOpacity(0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
             ],
           ),
-          child: Row(
+          child: const Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.logout_rounded, color: Colors.white, size: 18),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text('Log Out',
                   style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white)),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  )),
             ],
           ),
         ),
@@ -999,7 +1193,6 @@ class _LogoutButtonState extends State<_LogoutButton> {
 //  Custom painters
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Diagonal clip — bottom edge angles from lower-left to upper-right
 class _DiagonalClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
@@ -1015,7 +1208,6 @@ class _DiagonalClipper extends CustomClipper<Path> {
   bool shouldReclip(_) => false;
 }
 
-/// Subtle dot grid pattern for the hero background
 class _DotGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
