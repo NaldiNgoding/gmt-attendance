@@ -10,6 +10,7 @@ import 'attendance_log_screen.dart';
 import 'profile_page.dart';
 import 'lembur.dart';
 import 'att_announcement.dart';
+import 'att_approval.dart';
 import 'package:flutter/cupertino.dart';
 
 class HomePage extends StatefulWidget {
@@ -836,7 +837,14 @@ class _HomePageState extends State<HomePage> {
                       icon: CupertinoIcons.doc_checkmark_fill,
                       title: 'Approval',
                       color: kSuccess,
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ApprovalPage(),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(width: 18),
