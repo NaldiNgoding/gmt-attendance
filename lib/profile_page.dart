@@ -20,7 +20,7 @@ import 'attendance_home.dart';
 //   - POST /api/new_upload_profile_picture                  → upload photo
 // ─────────────────────────────────────────────────────────────────────────────
 
-const String _kBaseUrl = "http://localhost:8000";
+const String _kBaseUrl = "http://192.168.0.151:8000";
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
