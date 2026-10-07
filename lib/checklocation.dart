@@ -379,7 +379,7 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
     if (!canCheckInOut && widget.isCheckIn) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Anda harus berada dalam radius lokasi untuk Check In"),
+          content: Text("Anda harus berada di lokasi kantor untuk Check In"),
           backgroundColor: Colors.red,
         ),
       );
@@ -562,9 +562,6 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
     final userPoint =
         LatLng(currentPosition!.latitude, currentPosition!.longitude);
 
-    final actualRadius =
-        double.tryParse((locationData!["radius"] ?? 100).toString()) ?? 100.0;
-
     const double circleRadiusInPixels = 40.0;
 
     String tileUrl;
@@ -714,14 +711,14 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
               child: _mapBadge(
                 color: _kNavy.withOpacity(0.9),
                 radius: 20,
-                child: Row(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.radar, color: Colors.white, size: 13),
-                    const SizedBox(width: 5),
+                    Icon(Icons.location_on, color: Colors.white, size: 13),
+                    SizedBox(width: 5),
                     Text(
-                      "Radius: ${actualRadius.toStringAsFixed(0)} m",
-                      style: const TextStyle(
+                      "Lokasi Kantor",
+                      style: TextStyle(
                         color: Colors.white,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -805,9 +802,6 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
       return const SizedBox.shrink();
     }
 
-    final radiusValue =
-        double.tryParse(locationData!["radius"]?.toString() ?? '100') ?? 100.0;
-
     return Container(
       padding: const EdgeInsets.all(18),
       margin: const EdgeInsets.only(bottom: 16),
@@ -879,57 +873,37 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
               ),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          canCheckInOut ? Icons.check_circle : Icons.cancel,
-                          color: _statusColor,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          canCheckInOut ? "Dalam Radius" : "Luar Radius",
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: _statusColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (distanceMeter != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4, left: 26),
-                        child: Text(
-                          "Jarak: ${distanceMeter!.toStringAsFixed(2)} m",
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: _kMuted,
-                          ),
-                        ),
-                      ),
-                  ],
+                Icon(
+                  canCheckInOut ? Icons.check_circle : Icons.cancel,
+                  color: _statusColor,
+                  size: 18,
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    const Text(
-                      "Radius",
-                      style: TextStyle(fontSize: 11, color: _kMuted),
-                    ),
-                    Text(
-                      "${radiusValue.toStringAsFixed(0)} m",
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: _kBlue,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        canCheckInOut ? "Dalam Lokasi" : "Luar Lokasi",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: _statusColor,
+                        ),
                       ),
-                    ),
-                  ],
+                      if (distanceMeter != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            "Jarak: ${distanceMeter!.toStringAsFixed(2)} m",
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: _kMuted,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -943,16 +917,16 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: _kWarn.withOpacity(0.4)),
               ),
-              child: Row(
+              child: const Row(
                 children: [
                   Icon(Icons.warning_amber_rounded,
-                      color: Colors.orange[700], size: 18),
-                  const SizedBox(width: 8),
+                      color: Color(0xFFC2410C), size: 18),
+                  SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      "${(distanceMeter! - radiusValue).toStringAsFixed(2)} m di luar radius",
+                      "Anda berada di luar area kantor",
                       style: TextStyle(
-                        color: Colors.orange[900],
+                        color: Color(0xFF78350F),
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1138,7 +1112,7 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
           ),
           if (!canCheckInOut && !widget.isCheckIn && hasCheckedInToday)
             _buildActionButton(
-              label: "CHECK OUT (DI LUAR RADIUS)",
+              label: "CHECK OUT (DI LUAR LOKASI)",
               icon: Icons.logout,
               colors: const [Color(0xFFB91C1C), _kBad],
             ),
