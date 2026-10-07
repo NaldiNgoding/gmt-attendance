@@ -21,10 +21,10 @@ const Color _kBad = Color(0xFFDC2626);
 const Color _kWarn = Color(0xFFF59E0B);
 
 // ====== KONFIGURASI API ======
-// Ganti localhost:8000 dengan base URL kamu.
+// Ganti 192.168.0.151:8000 dengan base URL kamu.
 // Kalau backend di mesin yang sama dengan flutter web -> pakai localhost.
 // Kalau flutter web di HP/browser lain -> pakai IP LAN (mis. 192.168.1.10:8000).
-const String _kBaseUrl = "http://localhost:8000";
+const String _kBaseUrl = "http://192.168.0.151:8000";
 
 class CheckLocationPage extends StatefulWidget {
   final bool isCheckIn;
