@@ -53,10 +53,8 @@ class _ApprovalPageState extends State<ApprovalPage> {
   // ============================================================
 
   List<Map<String, dynamic>> _approvalList = [];
-
   bool _isLoading = true;
   bool _isApproving = false;
-
   String? _errorMessage;
 
   // ============================================================
@@ -64,7 +62,6 @@ class _ApprovalPageState extends State<ApprovalPage> {
   // ============================================================
 
   String _searchQuery = '';
-
   final TextEditingController _searchController = TextEditingController();
 
   // ============================================================
@@ -387,11 +384,8 @@ class _ApprovalPageState extends State<ApprovalPage> {
     if (_searchQuery.isNotEmpty) {
       result = result.where((item) {
         final name = (item['employee_name'] ?? '').toString().toLowerCase();
-
         final nik = (item['employee_nik'] ?? '').toString().toLowerCase();
-
         final type = (item['approval_type'] ?? '').toString().toLowerCase();
-
         final note = (item['note'] ?? '').toString().toLowerCase();
 
         return name.contains(_searchQuery) ||
@@ -473,6 +467,80 @@ class _ApprovalPageState extends State<ApprovalPage> {
 
       _showMessage(
         'Gagal melakukan approval.',
+        error: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isApproving = false;
+        });
+      }
+    }
+  }
+
+  //============================================================
+  // REJECT ONE
+  //============================================================
+
+  Future<void> _rejectOne(
+    Map<String, dynamic> item,
+  ) async {
+    if (_isApproving) return;
+
+    final approvalId = item['approval_id'];
+
+    if (approvalId == null) {
+      _showMessage(
+        'Approval ID tidak ditemukan.',
+        error: true,
+      );
+
+      return;
+    }
+
+    final rejectNote = await _showRejectDialog();
+
+    if (rejectNote == null) {
+      return;
+    }
+
+    setState(() {
+      _isApproving = true;
+    });
+
+    try {
+      final response = await http.post(
+        Uri.parse(
+          '$baseUrl/attendance-approvals/reject',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'employeeid': int.tryParse(_employeeId),
+          'approvalid': approvalId,
+          'rejectnote': rejectNote,
+        }),
+      );
+
+      if (!mounted) return;
+      final decoded = jsonDecode(response.body);
+      if (response.statusCode == 200 && decoded['success'] == true) {
+        _showMessage(
+          'Time-Off berhasil di-reject.',
+        );
+        await _fetchApprovals();
+      } else {
+        _showMessage(
+          decoded['message'] ?? 'Reject Time-Off gagal.',
+          error: true,
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage(
+        'Gagal melakukan reject.',
         error: true,
       );
     } finally {
@@ -647,6 +715,223 @@ class _ApprovalPageState extends State<ApprovalPage> {
     return result ?? false;
   }
 
+  // ============================================================
+  // REJECT NOTE
+  // ============================================================
+  Future<String?> _showRejectDialog() async {
+    final controller = TextEditingController();
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        String? errorText;
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    10,
+                    20,
+                    MediaQuery.of(context).viewInsets.bottom + 20,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Drag handle
+                      Center(
+                        child: Container(
+                          width: 42,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD7D7D7),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 22),
+
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.10),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              CupertinoIcons.xmark_circle_fill,
+                              color: Colors.red,
+                              size: 23,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Reject Request',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: kNavy,
+                                  ),
+                                ),
+                                SizedBox(height: 3),
+                                Text(
+                                  'Masukkan alasan penolakan request ini.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Reject note
+                      Text(
+                        'Reject Note',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey.shade800,
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      TextField(
+                        controller: controller,
+                        maxLines: 4,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: InputDecoration(
+                          hintText: 'Contoh: Data yang diajukan belum sesuai.',
+                          hintStyle: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade400,
+                          ),
+                          errorText: errorText,
+                          filled: true,
+                          fillColor: const Color(0xFFF7F8FA),
+                          contentPadding: const EdgeInsets.all(14),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(
+                              color: kNavy,
+                              width: 1.2,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Actions
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 48,
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  Navigator.pop(sheetContext);
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.grey.shade700,
+                                  side: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Cancel',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: SizedBox(
+                              height: 48,
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  final note = controller.text.trim();
+
+                                  if (note.isEmpty) {
+                                    setSheetState(() {
+                                      errorText = 'Reject note wajib diisi.';
+                                    });
+                                    return;
+                                  }
+
+                                  Navigator.pop(
+                                    sheetContext,
+                                    note,
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Reject',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+
+    return result;
+  }
   // ============================================================
   // MESSAGE
   // ============================================================
@@ -1053,11 +1338,17 @@ class _ApprovalPageState extends State<ApprovalPage> {
       item['date_end'],
     );
 
-    final note = _display(
-      item['note'],
+    final reason = _display(
+      item['reason'],
+    );
+
+    final rejectNote = _display(
+      item['reject_note'],
     );
 
     final history = _selectedTab == 1;
+    final status =
+        history ? (item['my_approval_status'] ?? 'Approved') : 'Pending';
 
     return Container(
       decoration: BoxDecoration(
@@ -1139,33 +1430,31 @@ class _ApprovalPageState extends State<ApprovalPage> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: history
-                        ? kGreen.withOpacity(
-                            0.10,
-                          )
-                        : kOrange.withOpacity(
-                            0.10,
-                          ),
+                    color: status == 'Rejected'
+                        ? Colors.red.withOpacity(0.10)
+                        : status == 'Approved'
+                            ? kGreen.withOpacity(0.10)
+                            : kOrange.withOpacity(0.10),
                     borderRadius: BorderRadius.circular(
                       20,
                     ),
                   ),
                   child: Text(
-                    history ? 'Approved' : 'Pending',
+                    status,
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
-                      color: history ? kGreen : kOrange,
+                      color: status == 'Rejected'
+                          ? Colors.red
+                          : status == 'Approved'
+                              ? kGreen
+                              : kOrange,
                     ),
                   ),
                 ),
               ],
             ),
-
-            const SizedBox(
-              height: 15,
-            ),
-
+            const SizedBox(height: 15),
             Row(
               children: [
                 const Icon(
@@ -1190,7 +1479,7 @@ class _ApprovalPageState extends State<ApprovalPage> {
               ],
             ),
 
-            if (note != '-') ...[
+            if (reason != '-') ...[
               const SizedBox(
                 height: 12,
               ),
@@ -1206,12 +1495,59 @@ class _ApprovalPageState extends State<ApprovalPage> {
                   ),
                 ),
                 child: Text(
-                  note,
+                  reason,
                   style: TextStyle(
                     fontSize: 13,
                     color: Colors.grey.shade700,
                     height: 1.4,
                   ),
+                ),
+              ),
+            ],
+
+            // ==================================================
+            // REJECT NOTE — TIME OFF REJECTED
+            // ==================================================
+            if (history &&
+                type.toLowerCase().contains('time') &&
+                status == 'Rejected' &&
+                rejectNote != '-') ...[
+              const SizedBox(
+                height: 12,
+              ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.red.withOpacity(0.15),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Reject Note',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.red,
+                      ),
+                    ),
+                    const SizedBox(
+                      height: 5,
+                    ),
+                    Text(
+                      rejectNote,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade700,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -1224,37 +1560,90 @@ class _ApprovalPageState extends State<ApprovalPage> {
               const SizedBox(
                 height: 14,
               ),
-              SizedBox(
-                width: double.infinity,
-                height: 46,
-                child: ElevatedButton.icon(
-                  onPressed: _isApproving
-                      ? null
-                      : () => _approveOne(
-                            item,
+              if (type.toLowerCase().contains('time') ||
+                  type.toLowerCase().contains('outside area') ||
+                  type.toLowerCase().contains('overtime'))
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _isApproving ? null : () => _rejectOne(item),
+                        icon: const Icon(
+                          CupertinoIcons.xmark_circle_fill,
+                          size: 18,
+                        ),
+                        label: const Text(
+                          'Reject',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
                           ),
-                  icon: const Icon(
-                    CupertinoIcons.checkmark_circle_fill,
-                    size: 19,
-                  ),
-                  label: const Text(
-                    'Approve',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(13)),
+                        ),
+                      ),
                     ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: kGreen,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        13,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed:
+                            _isApproving ? null : () => _approveOne(item),
+                        icon: const Icon(
+                          CupertinoIcons.checkmark_circle_fill,
+                          size: 18,
+                        ),
+                        label: const Text(
+                          'Approve',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kGreen,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 13,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(13),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton.icon(
+                    onPressed: _isApproving ? null : () => _approveOne(item),
+                    icon: const Icon(
+                      CupertinoIcons.checkmark_circle_fill,
+                      size: 19,
+                    ),
+                    label: const Text(
+                      'Approve',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kGreen,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(13),
                       ),
                     ),
                   ),
                 ),
-              ),
             ],
           ],
         ),

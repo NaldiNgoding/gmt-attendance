@@ -11,6 +11,7 @@ import 'profile_page.dart';
 import 'lembur.dart';
 import 'att_announcement.dart';
 import 'att_approval.dart';
+import 'timeoff.dart';
 import 'package:flutter/cupertino.dart';
 
 class HomePage extends StatefulWidget {
@@ -804,7 +805,14 @@ class _HomePageState extends State<HomePage> {
                       icon: CupertinoIcons.calendar_badge_minus,
                       title: 'Time Off',
                       color: Colors.teal,
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const TimeOffPage(),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(width: 18),
