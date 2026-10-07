@@ -1,6 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -23,7 +21,7 @@ class _TimeOffPageState extends State<TimeOffPage> {
   // CONSTANTS
   // ============================================================
 
-  static const String baseUrl = 'http://192.168.0.151:8000/api';
+  static const String baseUrl = 'http://localhost:8000/api';
 
   static const Color kNavy = Color(0xFF0D47A1);
   static const Color kBackground = Color(0xFFF6F8FC);
@@ -470,12 +468,19 @@ class _TimeOffPageState extends State<TimeOffPage> {
 
   Future<String?> _encodeAttachment(PlatformFile? file) async {
     if (file == null) return null;
-    if (file.bytes != null) return base64Encode(file.bytes!);
-    if (file.path != null) {
-      final bytes = await File(file.path!).readAsBytes();
+
+    try {
+      final bytes = await file.readAsBytes();
+
+      if (bytes.isEmpty) {
+        return null;
+      }
+
       return base64Encode(bytes);
+    } catch (e) {
+      debugPrint('Gagal membaca attachment ${file.name}: $e');
+      return null;
     }
-    return null;
   }
 
   String _formatBalance() {
@@ -1517,26 +1522,37 @@ class _TimeOffPageState extends State<TimeOffPage> {
 
   Future<void> _pickAttachment(
     int index,
-    StateSetter sheetSetState,
+    StateSetter setSheetState,
   ) async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final file = await FilePicker.pickFile(
         type: FileType.custom,
-        allowedExtensions: const ['jpg', 'jpeg', 'png', 'pdf'],
-        withData: true,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
       );
 
-      if (result == null || result.files.isEmpty) return;
+      if (file == null) {
+        return;
+      }
 
-      final file = result.files.first;
+      // Baca file untuk validasi ukuran.
+      final bytes = await file.readAsBytes();
 
-      if (file.size > 10 * 1024 * 1024) {
+      // Maksimal 10 MB per file.
+      const maxFileSize = 10 * 1024 * 1024;
+
+      if (bytes.length > maxFileSize) {
         _snack('Ukuran file maksimal 10 MB.');
         return;
       }
 
-      sheetSetState(() => _selectedAttachments[index] = file);
+      if (!mounted) return;
+
+      setSheetState(() {
+        _selectedAttachments[index] = file;
+      });
     } catch (e) {
+      if (!mounted) return;
+
       _snack('Gagal memilih file: $e');
     }
   }

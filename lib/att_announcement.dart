@@ -74,7 +74,7 @@ class Announcement {
 // ============================================================
 
 class AnnouncementService {
-  static const String baseUrl = 'http://192.168.0.151:8000/api';
+  static const String baseUrl = 'http://localhost:8000/api';
 
   Future<List<Announcement>> getAnnouncements() async {
     final response = await http.get(
@@ -1206,11 +1206,11 @@ class _AnnouncementFilePreviewState extends State<AnnouncementFilePreview> {
         'webp',
       ].contains(extension);
 
-  String get previewUrl => 'http://192.168.0.151:8000/api/'
+  String get previewUrl => 'http://localhost:8000/api/'
       'announcement-file/preview/'
       '${Uri.encodeComponent(widget.filename)}';
 
-  String get downloadUrl => 'http://192.168.0.151:8000/api/'
+  String get downloadUrl => 'http://localhost:8000/api/'
       'announcement-file/download/'
       '${Uri.encodeComponent(widget.filename)}';
 
