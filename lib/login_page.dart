@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'attendance_home.dart';
 import 'package:flutter/foundation.dart';
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Login Page — Blue Luxury Theme (Optimized)
 //  Palette  : Deep Blue · Gold accent · White/Cream
