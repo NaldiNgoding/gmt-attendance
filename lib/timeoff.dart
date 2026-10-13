@@ -4,7 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'dart:io';  // untuk File(path).readAsBytes()
 // ============================================================
 // PAGE
 // ============================================================
@@ -468,14 +468,19 @@ class _TimeOffPageState extends State<TimeOffPage> {
 
   Future<String?> _encodeAttachment(PlatformFile? file) async {
     if (file == null) return null;
-
     try {
-      final bytes = await file.readAsBytes();
-
-      if (bytes.isEmpty) {
+      // ✅ Ambil bytes langsung (sudah ada karena withData: true)
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        // Fallback: kalau bytes null (mis. file besar di Android/iOS),
+        // baca dari path
+        if (file.path != null) {
+          final fileData = await File(file.path!).readAsBytes();
+          if (fileData.isEmpty) return null;
+          return base64Encode(fileData);
+        }
         return null;
       }
-
       return base64Encode(bytes);
     } catch (e) {
       debugPrint('Gagal membaca attachment ${file.name}: $e');
@@ -1525,34 +1530,37 @@ class _TimeOffPageState extends State<TimeOffPage> {
     StateSetter setSheetState,
   ) async {
     try {
-      final file = await FilePicker.pickFile(
+      final result = await FilePicker.platform.pickFiles(
+        // ✅
         type: FileType.custom,
         allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+        withData: true, // ✅ WAJIB: agar file.bytes terisi
       );
 
-      if (file == null) {
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+
+      // ✅ Ambil bytes dari file.bytes (bukan readAsBytes())
+      final bytes = file.bytes;
+      if (bytes == null) {
+        _snack('Gagal membaca file.');
         return;
       }
 
-      // Baca file untuk validasi ukuran.
-      final bytes = await file.readAsBytes();
-
-      // Maksimal 10 MB per file.
+      // Maksimal 10 MB per file
       const maxFileSize = 10 * 1024 * 1024;
-
       if (bytes.length > maxFileSize) {
         _snack('Ukuran file maksimal 10 MB.');
         return;
       }
 
       if (!mounted) return;
-
       setSheetState(() {
         _selectedAttachments[index] = file;
       });
     } catch (e) {
       if (!mounted) return;
-
       _snack('Gagal memilih file: $e');
     }
   }
