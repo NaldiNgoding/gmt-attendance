@@ -8,9 +8,13 @@ import 'attendance_home.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Hive.initFlutter(); // ← tambah
-  await Hive.openBox('attendance_pending'); // ← tambah
+  // ==================== HIVE INIT ====================
+  await Hive.initFlutter();
+  await Hive.openBox('pending_attendance'); // antrian clock in/out offline
+  await Hive.openBox('cached_home_data'); // cache data home
+  await Hive.openBox('app_settings'); // settings tambahan
 
+  // ==================== CEK LOGIN ====================
   final prefs = await SharedPreferences.getInstance();
   final empid = prefs.getString('empid') ?? '';
 
