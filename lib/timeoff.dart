@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'transcuti.dart';
 
 // ============================================================
 // PAGE
@@ -161,10 +162,9 @@ class _TimeOffPageState extends State<TimeOffPage> {
 
     // Buang Map kosong
     result = result.where((e) => e.isNotEmpty).toList();
-
     // ✅ Filter: hanya pertahankan item yang punya info untuk ditampilkan
     result = result.where((item) {
-      final name = item['timeoff_name']?.toString().trim() ?? '';
+      final name = (item['timeoffname'] ?? '').toString().trim();
       final start = item['date_start']?.toString().trim() ?? '';
       final end = item['date_end']?.toString().trim() ?? '';
 
@@ -662,6 +662,43 @@ class _TimeOffPageState extends State<TimeOffPage> {
                   style: TextStyle(
                     fontSize: 11,
                     color: Colors.grey.shade500,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                TextButton(
+                  onPressed: _employeeId.isEmpty
+                      ? null
+                      : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => TransCutiPage(
+                                employeeId: _employeeId,
+                                initialYear: _balanceYear,
+                                baseUrl: baseUrl,
+                              ),
+                            ),
+                          );
+                        },
+                  style: TextButton.styleFrom(
+                    foregroundColor: kNavy,
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    alignment: Alignment.centerLeft,
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'View Detail',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      SizedBox(width: 5),
+                      Icon(Icons.arrow_forward_rounded, size: 14),
+                    ],
                   ),
                 ),
               ],
