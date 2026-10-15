@@ -14,19 +14,10 @@ import 'att_announcement.dart';
 import 'att_approval.dart';
 import 'timeoff.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'Offline/offline_att.dart';
 
-// ============================================================
-// KONFIGURASI PING (lokal untuk file ini)
-// ============================================================
-const String kPingUrl = '$kBaseUrl/api/ping';
-const String kPublicPingUrl = 'https://www.google.com';
-
-// ============================================================
-// ENUM TOP-LEVEL
-// ============================================================
-enum ConnectionStatus { good, weak, offline }
+// Sesuaikan import dengan lokasi file ConnectionService Anda.
+import 'connection_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -49,6 +40,10 @@ class _HomePageState extends State<HomePage> {
   // ==================== OFFLINE QUEUE ====================
   int _pendingCount = 0;
 
+  // ==================== AUTO-SYNC GUARD ====================
+  bool _isAutoSyncing = false;
+  ConnectionStatus? _lastConnectionStatus;
+
   // ==================== COLORS ====================
   static const Color kPrimary = Color(0xFF1E88E5);
   static const Color kSecondary = Color(0xFF0D47A1);
@@ -61,14 +56,7 @@ class _HomePageState extends State<HomePage> {
   static const Color kMutedText = Color(0xFF7A8496);
   static const Color kBorder = Color(0xFFE7EAF0);
 
-  // ==================== CONNECTION STATUS ====================
-  ConnectionStatus _connectionStatus = ConnectionStatus.good;
-  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
-  Timer? _connectionTimer;
-  bool _isCheckingConnection = false;
-  bool _isAutoSyncing = false;
-  final Connectivity _connectivity = Connectivity();
-
+  // ==================== CONNECTION COLORS ====================
   static const Color kConnGood = Color(0xFF4CAF50);
   static const Color kConnWeak = Color(0xFFFF9800);
   static const Color kConnOffline = Color(0xFFF44336);
@@ -80,15 +68,38 @@ class _HomePageState extends State<HomePage> {
     _loadUserData().then((_) => _loadHomeData());
     _refreshPendingCount();
     _updateTime();
-    _startConnectionMonitoring();
+
+    // Listener HANYA untuk auto-sync (bukan untuk rebuild UI).
+    // Rebuild UI ditangani oleh ValueListenableBuilder di build().
+    ConnectionService.instance.status.addListener(_onConnectionChanged);
+    _lastConnectionStatus = ConnectionService.instance.status.value;
   }
 
   @override
   void dispose() {
-    _connectivitySub?.cancel();
-    _connectionTimer?.cancel();
+    ConnectionService.instance.status.removeListener(_onConnectionChanged);
     super.dispose();
   }
+
+  // ==================== CONNECTION LISTENER (AUTO-SYNC ONLY) ====================
+  void _onConnectionChanged() {
+    if (!mounted) return;
+
+    final current = ConnectionService.instance.status.value;
+    final previous = _lastConnectionStatus;
+    _lastConnectionStatus = current;
+
+    // Auto-sync HANYA ketika transisi dari non-good → good.
+    // Tidak setState di sini — UI sudah di-handle ValueListenableBuilder.
+    if (current == ConnectionStatus.good &&
+        previous != ConnectionStatus.good) {
+      _autoSyncPending();
+    }
+  }
+
+  // Getter read-only untuk dipakai di _clockIn/_clockOut.
+  ConnectionStatus get _connectionStatus =>
+      ConnectionService.instance.status.value;
 
   // ==================== TIME ====================
   void _updateTime() {
@@ -201,7 +212,6 @@ class _HomePageState extends State<HomePage> {
           )
           .timeout(const Duration(seconds: 30));
     } catch (_) {
-      // Gagal kirim → masukkan ke antrian sebagai fallback
       await OfflineService.enqueue(
         type: 'clock_in',
         employeeId: empIdLocal,
@@ -277,105 +287,11 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // ==================== CONNECTION MONITORING ====================
-  void _startConnectionMonitoring() {
-    _checkConnection();
-
-    _connectivitySub = _connectivity.onConnectivityChanged.listen((results) {
-      final hasNetwork = _hasNetwork(results);
-      if (!hasNetwork) {
-        _updateConnectionStatus(ConnectionStatus.offline);
-      } else {
-        _checkConnection();
-      }
-    });
-
-    _connectionTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => _checkConnection(),
-    );
-  }
-
-  bool _hasNetwork(List<ConnectivityResult> results) {
-    if (results.isEmpty) return false;
-    if (results.contains(ConnectivityResult.none)) return false;
-    return true;
-  }
-
-  Future<void> _checkConnection() async {
-    if (_isCheckingConnection) return;
-    _isCheckingConnection = true;
-
-    try {
-      final results = await _connectivity.checkConnectivity();
-      if (!_hasNetwork(results)) {
-        _updateConnectionStatus(ConnectionStatus.offline);
-        return;
-      }
-
-      final latency = await _measureLatency();
-
-      if (latency == null) {
-        _updateConnectionStatus(ConnectionStatus.offline);
-      } else if (latency < 500) {
-        _updateConnectionStatus(ConnectionStatus.good);
-      } else if (latency < 1500) {
-        _updateConnectionStatus(ConnectionStatus.weak);
-      } else {
-        _updateConnectionStatus(ConnectionStatus.offline);
-      }
-    } catch (_) {
-      _updateConnectionStatus(ConnectionStatus.offline);
-    } finally {
-      _isCheckingConnection = false;
-    }
-  }
-
-  Future<int?> _measureLatency() async {
-    final localLatency = await _pingUrl(kPingUrl);
-    if (localLatency != null) return localLatency;
-
-    final publicLatency = await _pingUrl(kPublicPingUrl);
-    if (publicLatency != null) {
-      return publicLatency + 800;
-    }
-
-    return null;
-  }
-
-  Future<int?> _pingUrl(String url) async {
-    final stopwatch = Stopwatch()..start();
-    try {
-      final response =
-          await http.head(Uri.parse(url)).timeout(const Duration(seconds: 3));
-      stopwatch.stop();
-
-      if (response.statusCode >= 200 && response.statusCode < 400) {
-        return stopwatch.elapsedMilliseconds;
-      }
-      return null;
-    } catch (_) {
-      stopwatch.stop();
-      return null;
-    }
-  }
-
-  void _updateConnectionStatus(ConnectionStatus status) {
-    if (!mounted) return;
-    final wasOffline = _connectionStatus == ConnectionStatus.offline;
-
-    if (_connectionStatus != status) {
-      setState(() => _connectionStatus = status);
-    }
-
-    // 🔥 Auto-sync saat baru kembali online & ada pending
-    if (wasOffline && status != ConnectionStatus.offline) {
-      _autoSyncPending();
-    }
-  }
-
+  // ==================== AUTO SYNC ====================
   Future<void> _autoSyncPending() async {
     if (_isAutoSyncing) return;
+    if (_connectionStatus != ConnectionStatus.good) return;
+
     final count = await OfflineService.pendingCount();
     if (count == 0) return;
 
@@ -400,41 +316,50 @@ class _HomePageState extends State<HomePage> {
         await _refreshPendingCount();
         await _loadHomeData();
       }
+    } catch (_) {
+      // silent — coba lagi di siklus berikutnya
     } finally {
       _isAutoSyncing = false;
     }
   }
 
-  Color _getConnectionColor() {
-    switch (_connectionStatus) {
+  // ==================== CONNECTION UI HELPERS ====================
+  Color _getConnectionColor(ConnectionStatus status) {
+    switch (status) {
       case ConnectionStatus.good:
         return kConnGood;
       case ConnectionStatus.weak:
         return kConnWeak;
       case ConnectionStatus.offline:
         return kConnOffline;
+      case ConnectionStatus.checking:
+        return kMutedText;
     }
   }
 
-  String _getConnectionLabel() {
-    switch (_connectionStatus) {
+  String _getConnectionLabel(ConnectionStatus status) {
+    switch (status) {
       case ConnectionStatus.good:
         return 'Online';
       case ConnectionStatus.weak:
         return 'Sinyal Lemah';
       case ConnectionStatus.offline:
         return 'Offline';
+      case ConnectionStatus.checking:
+        return 'Memeriksa...';
     }
   }
 
-  IconData _getConnectionIcon() {
-    switch (_connectionStatus) {
+  IconData _getConnectionIcon(ConnectionStatus status) {
+    switch (status) {
       case ConnectionStatus.good:
         return CupertinoIcons.wifi;
       case ConnectionStatus.weak:
         return CupertinoIcons.wifi_exclamationmark;
       case ConnectionStatus.offline:
         return CupertinoIcons.wifi_slash;
+      case ConnectionStatus.checking:
+        return CupertinoIcons.wifi;
     }
   }
 
@@ -544,7 +469,7 @@ class _HomePageState extends State<HomePage> {
                             borderRadius: BorderRadius.circular(12)),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: const Text("Lihat Antrian",
+                      child: const Text("Lihat Offline Attendance",
                           style: TextStyle(color: Colors.white)),
                     ),
                   ),
@@ -642,7 +567,13 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
         ),
-        SliverToBoxAdapter(child: _buildOfflineBanner()),
+        // Banner dirender ulang otomatis saat status berubah.
+        SliverToBoxAdapter(
+          child: ValueListenableBuilder<ConnectionStatus>(
+            valueListenable: ConnectionService.instance.status,
+            builder: (context, status, _) => _buildOfflineBanner(status),
+          ),
+        ),
         SliverToBoxAdapter(child: _buildCorePillars()),
         SliverToBoxAdapter(child: _buildMenuSection()),
         SliverToBoxAdapter(child: const AnnouncementSection()),
@@ -692,7 +623,11 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    _buildConnectionIndicator(compact: true),
+                    ValueListenableBuilder<ConnectionStatus>(
+                      valueListenable: ConnectionService.instance.status,
+                      builder: (context, status, _) =>
+                          _buildConnectionIndicator(status, compact: true),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -789,8 +724,11 @@ class _HomePageState extends State<HomePage> {
   }
 
   // ==================== CONNECTION INDICATOR ====================
-  Widget _buildConnectionIndicator({bool compact = false}) {
-    final color = _getConnectionColor();
+  Widget _buildConnectionIndicator(
+    ConnectionStatus status, {
+    bool compact = false,
+  }) {
+    final color = _getConnectionColor(status);
 
     if (compact) {
       return AnimatedContainer(
@@ -823,10 +761,10 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             const SizedBox(width: 6),
-            Icon(_getConnectionIcon(), size: 13, color: Colors.white),
+            Icon(_getConnectionIcon(status), size: 13, color: Colors.white),
             const SizedBox(width: 4),
             Text(
-              _getConnectionLabel(),
+              _getConnectionLabel(status),
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 10,
@@ -865,10 +803,10 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(width: 8),
-          Icon(_getConnectionIcon(), size: 16, color: color),
+          Icon(_getConnectionIcon(status), size: 16, color: color),
           const SizedBox(width: 6),
           Text(
-            _getConnectionLabel(),
+            _getConnectionLabel(status),
             style: TextStyle(
               color: color,
               fontSize: 12,
@@ -881,8 +819,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   // ==================== OFFLINE BANNER ====================
-  Widget _buildOfflineBanner() {
-    final isOffline = _connectionStatus == ConnectionStatus.offline;
+  Widget _buildOfflineBanner(ConnectionStatus status) {
+    final isOffline = status == ConnectionStatus.offline;
     final hasPending = _pendingCount > 0;
 
     // Kalau online & tidak ada pending → sembunyikan
@@ -953,9 +891,9 @@ class _HomePageState extends State<HomePage> {
                 else if (isOffline)
                   OutlinedButton.icon(
                     onPressed: _openOfflineQueue,
-                    icon:
-                        const Icon(CupertinoIcons.tray_arrow_up_fill, size: 16),
-                    label: const Text('Lihat Antrian'),
+                    icon: const Icon(CupertinoIcons.tray_arrow_up_fill,
+                        size: 16),
+                    label: const Text('Lihat Offline Attendance'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: kConnOffline,
                       side: BorderSide(
@@ -1208,7 +1146,6 @@ class _HomePageState extends State<HomePage> {
                         await _loadHomeData();
                       }
                     } catch (_) {
-                      // Gagal kirim → sudah di-enqueue di dalam _clockIn
                       _showOfflineDialog(
                         "Check In Tersimpan (Gagal Kirim)",
                         "Koneksi terputus. Data sudah disimpan lokal "
@@ -1455,8 +1392,8 @@ class _HomePageState extends State<HomePage> {
                   const SizedBox(width: 18),
                   Expanded(
                     child: _buildMenuItem(
-                      icon: CupertinoIcons.tray_arrow_up_fill,
-                      title: 'Antrian',
+                      icon: CupertinoIcons.wifi_slash,
+                      title: 'Offline Attendance',
                       color: kConnWeak,
                       onTap: _openOfflineQueue,
                       badge: _pendingCount,
