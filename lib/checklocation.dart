@@ -21,10 +21,11 @@ const Color _kBad = Color(0xFFDC2626);
 const Color _kWarn = Color(0xFFF59E0B);
 
 // ====== KONFIGURASI API ======
-// Ganti localhost:8000 dengan base URL kamu.
-// Kalau backend di mesin yang sama dengan flutter web -> pakai localhost.
-// Kalau flutter web di HP/browser lain -> pakai IP LAN (mis. 192.168.1.10:8000).
 const String _kBaseUrl = "http://localhost:8000";
+
+// ====== CACHE KEYS ======
+const String _kCacheLocKey = 'cached_location_data_v1';
+const String _kCacheLocTimeKey = 'cached_location_time_v1';
 
 class CheckLocationPage extends StatefulWidget {
   final bool isCheckIn;
@@ -36,7 +37,7 @@ class CheckLocationPage extends StatefulWidget {
 }
 
 class _CheckLocationPageState extends State<CheckLocationPage> {
-  // State data
+  // ==================== STATE DATA ====================
   Map<String, dynamic>? locationData;
   String status = "Checking...";
   double? distanceMeter;
@@ -54,6 +55,11 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
   double? officeLat;
   double? officeLong;
   String? currentAddress;
+
+  // ==================== STATE CACHE ====================
+  bool _isUsingCachedLocation = false;
+  DateTime? _lastCacheTime;
+  double? _cachedRadius;
 
   final MapController mapController = MapController();
   final String currentTileLayer = 'openstreetmap';
@@ -106,7 +112,7 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
     );
     try {
       debugPrint("[CheckLocation] GET $url");
-      final response = await http.get(url).timeout(const Duration(seconds: 15));
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
       debugPrint("[CheckLocation] home status=${response.statusCode}");
 
       if (response.statusCode == 200) {
@@ -122,12 +128,50 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
         }
       }
     } catch (e, st) {
-      debugPrint("[CheckLocation] loadHomeData error: $e\n$st");
+      // Silent fail — tidak block check location
+      debugPrint("[CheckLocation] loadHomeData skip (offline?): $e");
     }
   }
 
   // ============================================================
-  // CHECK LOCATION
+  // LOCATION CACHE
+  // ============================================================
+  Future<void> _saveLocationCache(Map<String, dynamic> data) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kCacheLocKey, jsonEncode(data));
+      await prefs.setString(
+        _kCacheLocTimeKey,
+        DateTime.now().toIso8601String(),
+      );
+      debugPrint("[CheckLocation] ✅ location cached");
+    } catch (e) {
+      debugPrint("[CheckLocation] ⚠️ save cache error: $e");
+    }
+  }
+
+  Future<Map<String, dynamic>?> _loadLocationCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kCacheLocKey);
+      if (raw == null || raw.isEmpty) return null;
+      final timeRaw = prefs.getString(_kCacheLocTimeKey);
+      if (timeRaw != null) {
+        _lastCacheTime = DateTime.tryParse(timeRaw);
+      }
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+      return null;
+    } catch (e) {
+      debugPrint("[CheckLocation] load cache error: $e");
+      return null;
+    }
+  }
+
+  // ============================================================
+  // CHECK LOCATION — MAIN FLOW
   // ============================================================
   Future<void> _checkLocationAccess() async {
     if (!mounted) return;
@@ -141,25 +185,26 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
       officeLat = null;
       officeLong = null;
       currentAddress = null;
+      _isUsingCachedLocation = false;
     });
 
     if (locationId == null || locationId!.isEmpty) {
-      _fail("LocationID tidak ditemukan!");
+      _fail("LocationID tidak ditemukan di perangkat!");
       return;
     }
 
-    // 1) Ambil data lokasi kantor
+    // 1) Ambil data lokasi kantor (cache-first)
     final ok = await _fetchLocationFromApi(locationId!);
     if (!ok) return;
 
     // 2) Minta izin lokasi
     if (!await _handleLocationPermission()) return;
 
-    // 3) Ambil posisi GPS
+    // 3) Ambil posisi GPS — selalu jalan, offline pun OK
     try {
       currentPosition = await _getCurrentPositionSafe();
       if (currentPosition == null) {
-        _fail("Gagal mendapatkan posisi GPS (null)");
+        _fail("Gagal mendapatkan posisi GPS.");
         return;
       }
     } catch (e) {
@@ -167,8 +212,7 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
       return;
     }
 
-    // 4) Reverse geocoding (Nominatim) — non-blocking, jangan sampai gagal
-    //    bikin seluruh proses gagal.
+    // 4) Reverse geocoding — fire & forget, jangan block
     _getAddressFromLatLng(currentPosition!);
 
     // 5) Parse koordinat kantor
@@ -176,13 +220,14 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
       officeLat = double.parse(locationData!["lat"].toString());
       officeLong = double.parse(locationData!["long"].toString());
     } catch (e) {
-      _fail("Koordinat lokasi tidak valid: $e");
+      _fail("Koordinat lokasi kantor tidak valid: $e");
       return;
     }
 
-    // 6) Hitung jarak
-    final radius =
-        double.tryParse((locationData!["radius"] ?? 100).toString()) ?? 100.0;
+    // 6) Hitung jarak — murni matematika, offline OK
+    final radius = _cachedRadius ??
+        double.tryParse((locationData!["radius"] ?? 100).toString()) ??
+        100.0;
 
     distanceMeter = Geolocator.distanceBetween(
       currentPosition!.latitude,
@@ -194,8 +239,9 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
     canCheckInOut = distanceMeter! <= radius;
     status = canCheckInOut ? "✔ BERADA DALAM LOKASI" : "❌ DI LUAR LOKASI";
 
-    debugPrint(
-        "[CheckLocation] jarak=${distanceMeter!.toStringAsFixed(2)}m radius=${radius}m canCheckInOut=$canCheckInOut");
+    debugPrint("[CheckLocation] 📏 jarak=${distanceMeter!.toStringAsFixed(2)}m "
+        "radius=${radius}m canCheckInOut=$canCheckInOut "
+        "source=${_isUsingCachedLocation ? "CACHE" : "SERVER"}");
 
     if (!mounted) return;
     setState(() => isLoading = false);
@@ -210,15 +256,39 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
     });
   }
 
+  // ============================================================
+  // FETCH LOCATION — CACHE-FIRST
+  // ============================================================
   Future<bool> _fetchLocationFromApi(String locId) async {
+    // Step 1: Cek cache dulu — kalau ada, langsung pakai
+    final cached = await _loadLocationCache();
+    if (cached != null) {
+      debugPrint("[CheckLocation] 📦 pakai cache lokasi");
+      locationData = cached;
+      _isUsingCachedLocation = true;
+      _cachedRadius =
+          double.tryParse((cached["radius"] ?? 100).toString()) ?? 100.0;
+
+      // Refresh di background (silent, kalau online)
+      _refreshLocationCacheInBackground(locId);
+      return true;
+    }
+
+    // Step 2: Cache kosong → harus fetch dari server
+    debugPrint("[CheckLocation] 🌐 cache kosong, fetch dari server...");
+    return await _fetchFromServer(locId);
+  }
+
+  Future<bool> _fetchFromServer(String locId) async {
     final url = Uri.parse("$_kBaseUrl/api/getlocationbyid?id=$locId");
     try {
       debugPrint("[CheckLocation] GET $url");
-      final res = await http.get(url).timeout(const Duration(seconds: 15));
+      final res = await http.get(url).timeout(const Duration(seconds: 10));
       debugPrint("[CheckLocation] location status=${res.statusCode}");
 
       if (res.statusCode != 200) {
-        _fail("Gagal memuat lokasi! Status: ${res.statusCode}");
+        _fail("Tidak bisa akses server & belum ada cache lokasi.\n"
+            "Buka aplikasi saat online minimal sekali.");
         return false;
       }
 
@@ -226,17 +296,46 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
       if (result['success'] == true &&
           result['data'] is List &&
           (result['data'] as List).isNotEmpty) {
-        locationData = Map<String, dynamic>.from(result['data'][0]);
+        final data = Map<String, dynamic>.from(result['data'][0]);
+        locationData = data;
+        _isUsingCachedLocation = false;
+
+        // Simpan ke cache untuk offline ke depan
+        await _saveLocationCache(data);
         return true;
       }
 
-      _fail("Data lokasi tidak ditemukan!");
+      _fail("Data lokasi tidak ditemukan di server.");
       return false;
     } catch (e, st) {
-      debugPrint("[CheckLocation] fetchLocation error: $e\n$st");
-      _fail("Error fetch lokasi: $e");
+      debugPrint("[CheckLocation] fetch error: $e\n$st");
+      _fail("Tidak ada koneksi & belum ada cache lokasi.\n"
+          "Buka aplikasi saat online minimal sekali.");
       return false;
     }
+  }
+
+  /// Refresh cache di background — fire & forget, tidak block UI.
+  void _refreshLocationCacheInBackground(String locId) {
+    Future.microtask(() async {
+      try {
+        final url = Uri.parse("$_kBaseUrl/api/getlocationbyid?id=$locId");
+        final res = await http.get(url).timeout(const Duration(seconds: 8));
+        if (res.statusCode == 200) {
+          final result = jsonDecode(res.body) as Map<String, dynamic>;
+          if (result['success'] == true &&
+              result['data'] is List &&
+              (result['data'] as List).isNotEmpty) {
+            await _saveLocationCache(
+              Map<String, dynamic>.from(result['data'][0]),
+            );
+            debugPrint("[CheckLocation] 🔄 cache refreshed in background");
+          }
+        }
+      } catch (_) {
+        // Silent — memang offline
+      }
+    });
   }
 
   // ============================================================
@@ -247,7 +346,7 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
       if (!kIsWeb) {
         final serviceEnabled = await Geolocator.isLocationServiceEnabled();
         if (!serviceEnabled) {
-          _fail('Location services are disabled.');
+          _fail('GPS tidak aktif. Nyalakan lokasi di pengaturan.');
           return false;
         }
       }
@@ -259,12 +358,12 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
       }
 
       if (permission == LocationPermission.denied) {
-        _fail('Location permissions are denied');
+        _fail('Izin lokasi ditolak. Buka pengaturan untuk memberi izin.');
         return false;
       }
 
       if (permission == LocationPermission.deniedForever) {
-        _fail('Location permissions are permanently denied.');
+        _fail('Izin lokasi ditolak permanen. Buka pengaturan aplikasi.');
         return false;
       }
 
@@ -279,13 +378,13 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
   Future<Position?> _getCurrentPositionSafe() async {
     try {
       return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.best,
-        timeLimit: const Duration(seconds: 20),
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 30),
       );
     } catch (e) {
       debugPrint("[CheckLocation] getCurrentPosition error: $e");
 
-      // Fallback ke posisi terakhir
+      // Fallback ke posisi terakhir dari sistem
       try {
         final last = await Geolocator.getLastKnownPosition();
         if (last != null) {
@@ -300,7 +399,7 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
   }
 
   // ============================================================
-  // REVERSE GEOCODING (Nominatim)
+  // REVERSE GEOCODING (Nominatim) — fire & forget
   // ============================================================
   Future<void> _getAddressFromLatLng(Position position) async {
     final url = Uri.parse(
@@ -317,15 +416,14 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
       final response = await http.get(
         url,
         headers: {
-          // Nominatim wajib User-Agent yang jelas.
           'User-Agent': 'AttendanceApp/1.0 (contact@yourapp.com)',
           'Accept': 'application/json',
         },
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 8));
 
       debugPrint("[CheckLocation] nominatim status=${response.statusCode}");
       if (response.statusCode != 200) {
-        _setAddress("Alamat tidak tersedia");
+        _setAddress("Alamat tidak tersedia (offline)");
         return;
       }
 
@@ -361,9 +459,9 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
       _setAddress(parts.isNotEmpty
           ? parts.join(', ')
           : (displayName ?? "Alamat tidak tersedia"));
-    } catch (e, st) {
-      debugPrint("[CheckLocation] reverse geocoding error: $e\n$st");
-      _setAddress("Gagal mengambil alamat");
+    } catch (e) {
+      debugPrint("[CheckLocation] reverse geocode skip (offline): $e");
+      _setAddress("Alamat tidak tersedia (offline)");
     }
   }
 
@@ -464,6 +562,15 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
     );
   }
 
+  String _formatCacheAge(DateTime? time) {
+    if (time == null) return "";
+    final diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 1) return "baru saja";
+    if (diff.inHours < 1) return "${diff.inMinutes} menit lalu";
+    if (diff.inDays < 1) return "${diff.inHours} jam lalu";
+    return "${diff.inDays} hari lalu";
+  }
+
   // ============================================================
   // WIDGETS
   // ============================================================
@@ -531,6 +638,28 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
                       ),
                     ),
                   ),
+                if (_isUsingCachedLocation)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.cloud_off_rounded,
+                            color: Colors.white70, size: 13),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            "Offline — lokasi kantor dari cache"
+                            "${_lastCacheTime != null ? " (${_formatCacheAge(_lastCacheTime)})" : ""}",
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.white.withOpacity(0.75),
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -539,6 +668,7 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
     );
   }
 
+  // ==================== MAP ====================
   Widget _buildMapPreview() {
     if (officeLat == null || officeLong == null || currentPosition == null) {
       return Container(
@@ -558,6 +688,15 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
       );
     }
 
+    // Kalau pakai cache → tampilkan versi offline (lebih ringan)
+    if (_isUsingCachedLocation) {
+      return _buildOfflineMapFallback();
+    }
+
+    return _buildOnlineMap();
+  }
+
+  Widget _buildOnlineMap() {
     final officePoint = LatLng(officeLat!, officeLong!);
     final userPoint =
         LatLng(currentPosition!.latitude, currentPosition!.longitude);
@@ -797,6 +936,116 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
     );
   }
 
+  /// Fallback peta saat offline — UI sederhana dengan info jarak.
+  Widget _buildOfflineMapFallback() {
+    return Container(
+      height: 300,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [_kBlueLight, Color(0xFFDDE7FF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: _kBlue.withOpacity(0.15), width: 1),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: _kBlue.withOpacity(0.15),
+                  blurRadius: 16,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Icon(
+              canCheckInOut
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.location_searching_rounded,
+              size: 44,
+              color: _statusColor,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            canCheckInOut ? "BERADA DALAM LOKASI" : "DI LUAR LOKASI",
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              color: _statusColor,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "Peta tidak bisa dimuat saat offline.\n"
+            "Jarak & posisi tetap dihitung via GPS.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              color: _kMuted.withOpacity(0.9),
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _kBlue.withOpacity(0.2)),
+              boxShadow: [
+                BoxShadow(
+                  color: _kBlue.withOpacity(0.08),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.straighten_rounded, color: _statusColor, size: 20),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Jarak ke kantor",
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: _kMuted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      "${distanceMeter?.toStringAsFixed(1) ?? '0'} m",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: _statusColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== LOCATION DETAILS ====================
   Widget _buildLocationDetails() {
     if (locationData == null) {
       return const SizedBox.shrink();
@@ -861,6 +1110,34 @@ class _CheckLocationPageState extends State<CheckLocationPage> {
               ],
             ),
           ),
+          if (_isUsingCachedLocation)
+            Container(
+              margin: const EdgeInsets.only(top: 10),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: _kWarn.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _kWarn.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded,
+                      color: Color(0xFFC2410C), size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Data dari cache"
+                      "${_lastCacheTime != null ? " (${_formatCacheAge(_lastCacheTime)})" : ""}",
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF78350F),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(14),

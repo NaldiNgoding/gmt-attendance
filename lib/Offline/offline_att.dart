@@ -8,7 +8,7 @@ import 'package:intl/intl.dart';
 // ============================================================
 // BASE URL
 // ============================================================
-const String kBaseUrl = 'http://192.168.0.151:8000';
+const String kBaseUrl = 'http://localhost:8000';
 // Ping endpoint — ganti ke endpoint yang benar-benar ada di server Anda.
 // Kalau belum ada, buat endpoint /api/ping di backend yang return 200.
 const String kPingUrl = '$kBaseUrl/api/ping';
