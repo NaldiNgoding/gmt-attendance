@@ -3,7 +3,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'connection_service.dart';
 import 'welcome_page.dart';
-import 'attendance_home.dart'; // ← TAMBAH INI (sesuaikan nama file)
+import 'attendance_home.dart';
+import 'subordinates.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

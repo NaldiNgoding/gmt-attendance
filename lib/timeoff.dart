@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'transcuti.dart';
-import 'dart:io';  // untuk File(path).readAsBytes()
+import 'dart:io'; // untuk File(path).readAsBytes()
 // ============================================================
 // PAGE
 // ============================================================
@@ -84,6 +84,11 @@ class _TimeOffPageState extends State<TimeOffPage> {
   List<Map<String, dynamic>> _historyList = [];
   bool _isLoadingHistory = false;
   String? _historyError;
+
+  // ============================================================
+  // DETAIL APPROVAL CUTI
+  // ============================================================
+  final Set<String> _expandedHistoryIds = {};
 
   // ============================================================
   // STATE — Time-Off Form
@@ -286,8 +291,31 @@ class _TimeOffPageState extends State<TimeOffPage> {
         throw Exception(
             json['message']?.toString() ?? 'Gagal mengambil riwayat');
       }
-
       final parsed = _parseDataList(json['data']);
+      // Urutkan pengajuan terbaru ke paling atas.
+      parsed.sort((a, b) {
+        final dateA = DateTime.tryParse(
+          (a['created_date'] ?? a['createddate'] ?? '').toString(),
+        );
+        final dateB = DateTime.tryParse(
+          (b['created_date'] ?? b['createddate'] ?? '').toString(),
+        );
+        // Tanggal lebih baru diletakkan lebih dahulu.
+        if (dateA != null && dateB != null) {
+          final dateComparison = dateB.compareTo(dateA);
+          if (dateComparison != 0) {
+            return dateComparison;
+          }
+        } else if (dateA != null) {
+          return -1;
+        } else if (dateB != null) {
+          return 1;
+        }
+        // Jika tanggal sama, ID lebih besar diletakkan lebih dahulu.
+        final idA = int.tryParse((a['id'] ?? '0').toString()) ?? 0;
+        final idB = int.tryParse((b['id'] ?? '0').toString()) ?? 0;
+        return idB.compareTo(idA);
+      });
 
       if (!mounted) return;
       setState(() {
@@ -395,7 +423,7 @@ class _TimeOffPageState extends State<TimeOffPage> {
       };
 
       final response = await http.post(
-        Uri.parse('$baseUrl/createtimeoffdata'),
+        Uri.parse('$baseUrl/attcreatetimeoffdata'),
         headers: const {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -408,14 +436,20 @@ class _TimeOffPageState extends State<TimeOffPage> {
       if (response.statusCode >= 200 &&
           response.statusCode < 300 &&
           responseData['success'] == true) {
-        if (mounted) Navigator.of(context).pop();
+        if (!mounted) return;
+        // Tutup popup pengajuan.
+        Navigator.of(context).pop();
+        // Arahkan filter ke bulan dan tahun pengajuan yang baru.
+        setState(() {
+          _selectedMonth = startDate.month;
+          _selectedYear = startDate.year;
+        });
         _resetForm();
-
+        // Refresh data setelah filter diperbarui.
         await Future.wait([
           _loadLeaveBalance(),
           _loadHistory(),
         ]);
-
         _snack('Pengajuan Time-Off berhasil dikirim.');
       } else {
         throw Exception(
@@ -468,19 +502,12 @@ class _TimeOffPageState extends State<TimeOffPage> {
 
   Future<String?> _encodeAttachment(PlatformFile? file) async {
     if (file == null) return null;
+
     try {
-      // ✅ Ambil bytes langsung (sudah ada karena withData: true)
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) {
-        // Fallback: kalau bytes null (mis. file besar di Android/iOS),
-        // baca dari path
-        if (file.path != null) {
-          final fileData = await File(file.path!).readAsBytes();
-          if (fileData.isEmpty) return null;
-          return base64Encode(fileData);
-        }
-        return null;
-      }
+      final bytes = await file.readAsBytes();
+
+      if (bytes.isEmpty) return null;
+
       return base64Encode(bytes);
     } catch (e) {
       debugPrint('Gagal membaca attachment ${file.name}: $e');
@@ -822,21 +849,28 @@ class _TimeOffPageState extends State<TimeOffPage> {
 
   Widget _buildYearDropdown() {
     final currentYear = DateTime.now().year;
+    final years = <int>{
+      ...List.generate(5, (i) => currentYear - i),
+      _selectedYear,
+    }.toList()
+      ..sort((a, b) => b.compareTo(a));
     return _buildDropdownContainer(
       child: DropdownButton<int>(
         value: _selectedYear,
         isExpanded: true,
         icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
-        items: List.generate(5, (i) {
-          final y = currentYear - i;
+        items: years.map((y) {
           return DropdownMenuItem<int>(
             value: y,
             child: Text(
               y.toString(),
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           );
-        }),
+        }).toList(),
         onChanged: (v) async {
           if (v == null || v == _selectedYear) return;
           setState(() => _selectedYear = v);
@@ -960,10 +994,32 @@ class _TimeOffPageState extends State<TimeOffPage> {
     final status = item['status']?.toString() ?? '-';
     final rejectNote = item['reject_note']?.toString() ?? '';
 
+    final requestId = (item['id'] ?? item['timeoff_id'] ?? '').toString();
+
+    // Ambil daftar approval dari response API.
+    final rawApproval = item['approval'];
+
+    final approvals = rawApproval is List
+        ? rawApproval
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList()
+        : <Map<String, dynamic>>[];
+
+    // Pastikan urutan approval selalu dari level 1 ke level berikutnya.
+    approvals.sort((a, b) {
+      final levelA = int.tryParse(a['level']?.toString() ?? '') ?? 99;
+      final levelB = int.tryParse(b['level']?.toString() ?? '') ?? 99;
+
+      return levelA.compareTo(levelB);
+    });
+
+    final isExpanded =
+        requestId.isNotEmpty && _expandedHistoryIds.contains(requestId);
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -978,24 +1034,221 @@ class _TimeOffPageState extends State<TimeOffPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            item['timeoff_name']?.toString() ?? '-',
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
+          // Header pengajuan yang bisa ditekan.
+          InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: requestId.isEmpty
+                ? null
+                : () {
+                    setState(() {
+                      if (_expandedHistoryIds.contains(requestId)) {
+                        _expandedHistoryIds.remove(requestId);
+                      } else {
+                        _expandedHistoryIds.add(requestId);
+                      }
+                    });
+                  },
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item['timeoff_name']?.toString() ?? '-',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: kNavy,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      AnimatedRotation(
+                        turns: isExpanded ? 0.5 : 0.0,
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeInOut,
+                        child: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: kNavy,
+                          size: 24,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${item['date_start'] ?? '-'} - '
+                    '${item['date_end'] ?? '-'}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildStatusBadge(status),
+                  if (status.trim().toLowerCase() == 'rejected' &&
+                      rejectNote.trim().isNotEmpty)
+                    _buildRejectNote(rejectNote),
+                  const SizedBox(height: 8),
+                  Text(
+                    isExpanded
+                        ? 'Sembunyikan detail approval'
+                        : 'Tekan untuk melihat detail approval',
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w600,
+                      color: kTextPrimary.withOpacity(0.60),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Detail approval hanya ditampilkan jika pengajuan dibuka.
+          AnimatedSize(
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeInOutCubic,
+            alignment: Alignment.topCenter,
+            child: isExpanded
+                ? _buildApprovalTimeline(approvals)
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildApprovalTimeline(
+    List<Map<String, dynamic>> approvals,
+  ) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: kFieldBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: kNavy.withOpacity(0.10),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Riwayat Approval',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
               color: kNavy,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            '${item['date_start'] ?? '-'} - ${item['date_end'] ?? '-'}',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 8),
-          _buildStatusBadge(status),
-          if (status.trim().toLowerCase() == 'rejected' &&
-              rejectNote.trim().isNotEmpty)
-            _buildRejectNote(rejectNote),
+          const SizedBox(height: 14),
+          if (approvals.isEmpty)
+            Text(
+              'Data approval belum tersedia.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+              ),
+            )
+          else
+            ...List.generate(approvals.length, (index) {
+              final approval = approvals[index];
+              final level = approval['level']?.toString() ?? '${index + 1}';
+              final approverName =
+                  (approval['approver_name'] ?? '').toString().trim();
+              final approvalStatus =
+                  (approval['status'] ?? 'Pending').toString();
+              final approvalTime = (approval['time'] ?? '').toString().trim();
+              final isApproved = approvalStatus.toLowerCase() == 'approved';
+              final approverText = approverName.isEmpty
+                  ? 'Nama approver tidak tersedia'
+                  : isApproved
+                      ? 'Approved by $approverName'
+                      : 'Approver: $approverName';
+
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: index == approvals.length - 1 ? 0 : 16,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Penanda nomor approval.
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: kNavy.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        level,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: kNavy,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+
+                    // Informasi setiap tahap approval.
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Approval $level',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: kTextPrimary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              _buildStatusBadge(
+                                approvalStatus,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            approverText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          if (approvalTime.isNotEmpty &&
+                              approvalTime != 'null') ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Waktu approval: $approvalTime',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade500,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -1567,38 +1820,42 @@ class _TimeOffPageState extends State<TimeOffPage> {
     StateSetter setSheetState,
   ) async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        // ✅
+      final files = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
-        withData: true, // ✅ WAJIB: agar file.bytes terisi
       );
 
-      if (result == null || result.files.isEmpty) return;
+      // User membatalkan pemilihan file.
+      if (files.isEmpty) return;
 
-      final file = result.files.first;
+      final file = files.first;
 
-      // ✅ Ambil bytes dari file.bytes (bukan readAsBytes())
-      final bytes = file.bytes;
-      if (bytes == null) {
+      // Baca file menggunakan API PlatformFile terbaru.
+      final bytes = await file.readAsBytes();
+
+      if (bytes.isEmpty) {
         _snack('Gagal membaca file.');
         return;
       }
 
-      // Maksimal 10 MB per file
+      // Maksimal 10 MB per file.
       const maxFileSize = 10 * 1024 * 1024;
+
       if (bytes.length > maxFileSize) {
         _snack('Ukuran file maksimal 10 MB.');
         return;
       }
 
       if (!mounted) return;
+
       setSheetState(() {
         _selectedAttachments[index] = file;
       });
     } catch (e) {
       if (!mounted) return;
+
       _snack('Gagal memilih file: $e');
+      debugPrint('File picker error: $e');
     }
   }
 }

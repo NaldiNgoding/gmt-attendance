@@ -15,6 +15,7 @@ import 'att_approval.dart';
 import 'timeoff.dart';
 import 'package:flutter/cupertino.dart';
 import 'Offline/offline_att.dart';
+import 'subordinates.dart';
 
 // Sesuaikan import dengan lokasi file ConnectionService Anda.
 import 'connection_service.dart';
@@ -91,8 +92,7 @@ class _HomePageState extends State<HomePage> {
 
     // Auto-sync HANYA ketika transisi dari non-good → good.
     // Tidak setState di sini — UI sudah di-handle ValueListenableBuilder.
-    if (current == ConnectionStatus.good &&
-        previous != ConnectionStatus.good) {
+    if (current == ConnectionStatus.good && previous != ConnectionStatus.good) {
       _autoSyncPending();
     }
   }
@@ -487,6 +487,26 @@ class _HomePageState extends State<HomePage> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const ProfilePage()),
+    );
+  }
+
+  void _openSubordinate() {
+    if (empId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Employee ID tidak ditemukan.'),
+        ),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SubordinatePage(
+          employeeId: empId,
+        ),
+      ),
     );
   }
 
@@ -891,8 +911,8 @@ class _HomePageState extends State<HomePage> {
                 else if (isOffline)
                   OutlinedButton.icon(
                     onPressed: _openOfflineQueue,
-                    icon: const Icon(CupertinoIcons.tray_arrow_up_fill,
-                        size: 16),
+                    icon:
+                        const Icon(CupertinoIcons.tray_arrow_up_fill, size: 16),
                     label: const Text('Lihat Offline Attendance'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: kConnOffline,
@@ -1402,10 +1422,10 @@ class _HomePageState extends State<HomePage> {
                   const SizedBox(width: 18),
                   Expanded(
                     child: _buildMenuItem(
-                      icon: CupertinoIcons.person_solid,
-                      title: 'Profil',
+                      icon: CupertinoIcons.group_solid,
+                      title: 'Subordinates',
                       color: kSecondary,
-                      onTap: _openProfile,
+                      onTap: _openSubordinate,
                     ),
                   ),
                 ],

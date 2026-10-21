@@ -52,6 +52,8 @@ class _ProfilePageState extends State<ProfilePage>
   Uint8List? _profileThumbBytes;
   bool _uploadingPhoto = false;
   final ImagePicker _picker = ImagePicker();
+  bool _savingPhone = false;
+  bool _savingPersonalDetails = false;
 
   // ── animations ────────────────────────────────────────────────────────────
   late final AnimationController _masterCtrl;
@@ -361,12 +363,39 @@ class _ProfilePageState extends State<ProfilePage>
   String get _nik => _p('nik');
   String get _email => _p('email');
   String get _telp => _p('telp');
-  String get _gender => _p('gender');
+  String get _gender {
+    final gender = _p('gender');
+    if (gender == 'L') {
+      return 'Laki-laki';
+    } else if (gender == 'P') {
+      return 'Perempuan';
+    } else {
+      return gender.isEmpty ? '-' : gender;
+    }
+  }
+
   String get _agama => _p('agama');
   String get _golDarah => _p('golongan_darah');
   String get _statusKawin => _p('status_kawin');
-  String get _alamat =>
-      _p('address', _p('alamat_kini1', _p('alamat_kini2', '-')));
+
+  String get _alamat {
+    final address = _personal?['address']?.toString().trim();
+
+    if (address != null && address.isNotEmpty && address != '-') {
+      return address;
+    }
+
+    final parts = [
+      _personal?['alamat_kini1'],
+      _personal?['alamat_kini2'],
+      _personal?['alamat_kini3'],
+    ]
+        .map((value) => value?.toString().trim() ?? '')
+        .where((value) => value.isNotEmpty && value != '-')
+        .toList();
+
+    return parts.isEmpty ? '-' : parts.join(' ');
+  }
 
   String get _joinDate {
     final raw = _p('tglmsk');
@@ -388,6 +417,1024 @@ class _ProfilePageState extends State<ProfilePage>
       return parts[0][0].toUpperCase();
     }
     return 'U';
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  UPDATE IN PROFILE PAGE
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _showEditPhoneDialog() async {
+    final phoneController = TextEditingController(
+      text: _telp == '-' ? '' : _telp,
+    );
+
+    final formKey = GlobalKey<FormState>();
+    bool isSubmittingDialog = false;
+
+    final newPhone = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.35),
+      builder: (sheetContext) {
+        Future<void> submitPhone() async {
+          if (isSubmittingDialog) return;
+
+          if (!(formKey.currentState?.validate() ?? false)) {
+            return;
+          }
+
+          final phone = phoneController.text.trim();
+
+          isSubmittingDialog = true;
+
+          // Lepaskan keyboard terlebih dahulu.
+          FocusManager.instance.primaryFocus?.unfocus();
+
+          // Beri waktu kepada Flutter Web untuk menyelesaikan
+          // perubahan fokus dan koneksi keyboard.
+          await Future<void>.delayed(
+            const Duration(milliseconds: 250),
+          );
+
+          if (!sheetContext.mounted) return;
+
+          Navigator.of(sheetContext).pop(phone);
+        }
+
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+          ),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+            ),
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Drag handle
+                      Center(
+                        child: Container(
+                          width: 38,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE2E6EC),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Header
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Nomor Telepon',
+                                  style: TextStyle(
+                                    fontSize: 21,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.5,
+                                    color: Color(0xFF172B4D),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Perbarui nomor telepon yang dapat dihubungi.',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    height: 1.5,
+                                    color: Colors.blueGrey.shade500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Material(
+                            color: const Color(0xFFF3F5F8),
+                            shape: const CircleBorder(),
+                            child: IconButton(
+                              onPressed: () {
+                                Navigator.pop(sheetContext);
+                              },
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                size: 19,
+                                color: Color(0xFF526176),
+                              ),
+                              tooltip: 'Tutup',
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 28),
+
+                      // Input label
+                      const Text(
+                        'PHONE NUMBER',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.1,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      // Phone input
+                      TextFormField(
+                        controller: phoneController,
+                        autofocus: true,
+                        keyboardType: TextInputType.phone,
+                        maxLength: 25,
+                        textInputAction: TextInputAction.done,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[0-9+\-()\s]'),
+                          ),
+                        ],
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF172B4D),
+                          letterSpacing: 0.2,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Contoh: 081234567890',
+                          hintStyle: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            color: Color(0xFFADB7C5),
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.phone_iphone_rounded,
+                            color: Color(0xFF064694),
+                            size: 21,
+                          ),
+                          counterText: '',
+                          filled: true,
+                          fillColor: const Color(0xFFF7F9FC),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 18,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(15),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFE8EDF4),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(15),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFE8EDF4),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(15),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF064694),
+                              width: 1.5,
+                            ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(15),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFDC5555),
+                            ),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(15),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFDC5555),
+                              width: 1.2,
+                            ),
+                          ),
+                        ),
+                        validator: (value) {
+                          final phone = (value ?? '').trim();
+
+                          if (phone.isEmpty) {
+                            return 'Nomor telepon wajib diisi.';
+                          }
+
+                          final digits = phone.replaceAll(
+                            RegExp(r'\D'),
+                            '',
+                          );
+
+                          if (digits.length < 8 || digits.length > 15) {
+                            return 'Masukkan 8–15 digit nomor telepon.';
+                          }
+
+                          return null;
+                        },
+                        onFieldSubmitted: (_) {
+                          submitPhone();
+                        },
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Helper text
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            size: 15,
+                            color: Colors.blueGrey.shade400,
+                          ),
+                          const SizedBox(width: 7),
+                          Expanded(
+                            child: Text(
+                              'Pastikan nomor yang dimasukkan aktif dan benar.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.5,
+                                color: Colors.blueGrey.shade400,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 28),
+
+                      // Save button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            if (formKey.currentState?.validate() ?? false) {
+                              Navigator.pop(
+                                sheetContext,
+                                phoneController.text.trim(),
+                              );
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _navy,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Simpan Perubahan',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.1,
+                                ),
+                              ),
+                              SizedBox(width: 9),
+                              Icon(
+                                Icons.arrow_forward_rounded,
+                                size: 18,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    // Tunggu agar animasi penutupan bottom sheet selesai.
+    await Future<void>.delayed(
+      const Duration(milliseconds: 350),
+    );
+
+    phoneController.dispose();
+
+    if (newPhone == null || newPhone.isEmpty) {
+      return;
+    }
+
+    if (newPhone == _telp) {
+      return;
+    }
+
+    await _saveProfilePhone(newPhone);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  UPDATE IN PROFILE PAGE
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _showEditPersonalDetailsDialog() async {
+    final addressController = TextEditingController(
+      text: _alamat == '-' ? '' : _alamat,
+    );
+
+    final formKey = GlobalKey<FormState>();
+
+    List<String> optionsWithCurrent(
+      List<String> defaults,
+      String current,
+    ) {
+      final result = List<String>.from(defaults);
+      final value = current.trim();
+
+      if (value.isNotEmpty &&
+          value != '-' &&
+          !result.any(
+            (item) => item.toLowerCase() == value.toLowerCase(),
+          )) {
+        result.insert(0, value);
+      }
+
+      return result;
+    }
+
+    String? selectedOption(
+      List<String> options,
+      String current,
+    ) {
+      final value = current.trim();
+
+      if (value.isEmpty || value == '-') return null;
+
+      for (final option in options) {
+        if (option.toLowerCase() == value.toLowerCase()) {
+          return option;
+        }
+      }
+
+      return null;
+    }
+
+    final genderOptions = optionsWithCurrent(
+      ['Laki-laki', 'Perempuan'],
+      _gender,
+    );
+
+    final religionOptions = optionsWithCurrent(
+      [
+        'Islam',
+        'Kristen',
+        'Katolik',
+        'Hindu',
+        'Buddha',
+        'Konghucu',
+        'Lainnya',
+      ],
+      _agama,
+    );
+
+    final bloodOptions = optionsWithCurrent(
+      [
+        'A',
+        'B',
+        'AB',
+        'O',
+        'A+',
+        'A-',
+        'B+',
+        'B-',
+        'AB+',
+        'AB-',
+        'O+',
+        'O-',
+      ],
+      _golDarah,
+    );
+
+    final maritalOptions = optionsWithCurrent(
+      ['Belum Kawin', 'Kawin', 'Tidak Kawin', 'K/0', 'K/1', 'K/3'],
+      _statusKawin,
+    );
+
+    String? selectedGender = selectedOption(genderOptions, _gender);
+    String? selectedReligion = selectedOption(religionOptions, _agama);
+    String? selectedBlood = selectedOption(bloodOptions, _golDarah);
+    String? selectedMarital = selectedOption(maritalOptions, _statusKawin);
+
+    InputDecoration fieldDecoration(IconData icon) {
+      return InputDecoration(
+        prefixIcon: Icon(
+          icon,
+          color: _navy,
+          size: 21,
+        ),
+        filled: true,
+        fillColor: const Color(0xFFF7F9FC),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 17,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(
+            color: Color(0xFFE8EDF4),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(
+            color: Color(0xFFE8EDF4),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(
+            color: Color(0xFF064694),
+            width: 1.5,
+          ),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(
+            color: Color(0xFFDC5555),
+          ),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(
+            color: Color(0xFFDC5555),
+            width: 1.2,
+          ),
+        ),
+      );
+    }
+
+    Widget dropdownField({
+      required String label,
+      required String hint,
+      required IconData icon,
+      required String? value,
+      required List<String> options,
+      required ValueChanged<String?> onChanged,
+    }) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.1,
+              color: Color(0xFF64748B),
+            ),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: value,
+            isExpanded: true,
+            hint: Text(
+              hint,
+              style: const TextStyle(
+                color: Color(0xFFADB7C5),
+                fontSize: 14,
+              ),
+            ),
+            icon: const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: Color(0xFF718096),
+            ),
+            decoration: fieldDecoration(icon),
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF172B4D),
+            ),
+            items: options.map((option) {
+              return DropdownMenuItem<String>(
+                value: option,
+                child: Text(
+                  option,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            }).toList(),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return '$label wajib dipilih.';
+              }
+              return null;
+            },
+            onChanged: onChanged,
+          ),
+        ],
+      );
+    }
+
+    bool isSubmitting = false;
+    Map<String, String>? updatedDetails;
+
+    try {
+      updatedDetails = await showModalBottomSheet<Map<String, String>>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        barrierColor: Colors.black.withOpacity(0.35),
+        builder: (sheetContext) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+            ),
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                child: StatefulBuilder(
+                  builder: (stateContext, sheetSetState) {
+                    Future<void> submitDetails() async {
+                      if (isSubmitting) return;
+
+                      if (!(formKey.currentState?.validate() ?? false)) {
+                        return;
+                      }
+
+                      isSubmitting = true;
+
+                      sheetSetState(() {});
+
+                      final result = <String, String>{
+                        'gender': selectedGender!,
+                        'agama': selectedReligion!,
+                        'golongan_darah': selectedBlood!,
+                        'status_kawin': selectedMarital!,
+                        'address': addressController.text.trim(),
+                      };
+
+                      // Tutup keyboard lebih dahulu untuk menghindari
+                      // konflik fokus ketika bottom sheet ditutup.
+                      FocusManager.instance.primaryFocus?.unfocus();
+
+                      await Future<void>.delayed(
+                        const Duration(milliseconds: 250),
+                      );
+
+                      if (!stateContext.mounted) return;
+
+                      Navigator.of(stateContext).pop(result);
+                    }
+
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(
+                        24,
+                        12,
+                        24,
+                        24,
+                      ),
+                      child: Form(
+                        key: formKey,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Drag handle
+                            Center(
+                              child: Container(
+                                width: 38,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE2E6EC),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // Header
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Personal Details',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: _navy,
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: _savingPersonalDetails
+                                      ? null
+                                      : _showEditPersonalDetailsDialog,
+                                  icon: const Icon(
+                                    Icons.edit_rounded,
+                                    size: 20,
+                                    color: _navy,
+                                  ),
+                                  tooltip: 'Edit Personal Details',
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: const Color(0xFFF0F3F8),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 28),
+
+                            // Gender
+                            dropdownField(
+                              label: 'Gender',
+                              hint: 'Pilih gender',
+                              icon: Icons.wc_rounded,
+                              value: selectedGender,
+                              options: genderOptions,
+                              onChanged: (value) {
+                                sheetSetState(() {
+                                  selectedGender = value;
+                                });
+                              },
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // Religion
+                            dropdownField(
+                              label: 'Religion',
+                              hint: 'Pilih agama',
+                              icon: Icons.church_rounded,
+                              value: selectedReligion,
+                              options: religionOptions,
+                              onChanged: (value) {
+                                sheetSetState(() {
+                                  selectedReligion = value;
+                                });
+                              },
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // Blood type
+                            dropdownField(
+                              label: 'Blood Type',
+                              hint: 'Pilih golongan darah',
+                              icon: Icons.bloodtype_rounded,
+                              value: selectedBlood,
+                              options: bloodOptions,
+                              onChanged: (value) {
+                                sheetSetState(() {
+                                  selectedBlood = value;
+                                });
+                              },
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // Marital status
+                            dropdownField(
+                              label: 'Marital Status',
+                              hint: 'Pilih status perkawinan',
+                              icon: Icons.favorite_rounded,
+                              value: selectedMarital,
+                              options: maritalOptions,
+                              onChanged: (value) {
+                                sheetSetState(() {
+                                  selectedMarital = value;
+                                });
+                              },
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // Address: tetap menggunakan TextFormField
+                            const Text(
+                              'ADDRESS',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.1,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+
+                            const SizedBox(height: 10),
+
+                            TextFormField(
+                              controller: addressController,
+                              keyboardType: TextInputType.multiline,
+                              textInputAction: TextInputAction.newline,
+                              maxLines: 3,
+                              minLines: 3,
+                              maxLength: 150,
+                              decoration: fieldDecoration(
+                                Icons.home_rounded,
+                              ).copyWith(
+                                hintText: 'Masukkan alamat lengkap',
+                                hintStyle: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFFADB7C5),
+                                ),
+                                alignLabelWithHint: true,
+                                counterStyle: const TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF94A3B8),
+                                ),
+                              ),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF172B4D),
+                                height: 1.5,
+                              ),
+                            ),
+
+                            const SizedBox(height: 14),
+
+                            // Helper text
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.info_outline_rounded,
+                                  size: 15,
+                                  color: Color(0xFF94A3B8),
+                                ),
+                                const SizedBox(width: 7),
+                                Expanded(
+                                  child: Text(
+                                    'Pastikan informasi personal sudah benar.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      height: 1.5,
+                                      color: Colors.blueGrey.shade400,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 28),
+
+                            // Save button
+                            SizedBox(
+                              width: double.infinity,
+                              height: 52,
+                              child: ElevatedButton(
+                                onPressed: isSubmitting ? null : submitDetails,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _navy,
+                                  disabledBackgroundColor:
+                                      _navy.withOpacity(0.7),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                ),
+                                child: isSubmitting
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            'Simpan Perubahan',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 0.1,
+                                            ),
+                                          ),
+                                          SizedBox(width: 9),
+                                          Icon(
+                                            Icons.arrow_forward_rounded,
+                                            size: 18,
+                                          ),
+                                        ],
+                                      ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 8),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    } finally {
+      // Beri waktu agar animasi penutupan selesai sebelum
+      // controller dibuang.
+      await Future<void>.delayed(
+        const Duration(milliseconds: 350),
+      );
+
+      addressController.dispose();
+    }
+
+    if (updatedDetails == null) return;
+
+    await _saveProfilePersonalDetails(updatedDetails);
+  }
+
+  Future<void> _saveProfilePersonalDetails(
+    Map<String, String> details,
+  ) async {
+    if (_savingPersonalDetails) return;
+
+    setState(() {
+      _savingPersonalDetails = true;
+    });
+
+    try {
+      final response = await http.post(
+        Uri.parse(
+          '$_kBaseUrl/api/update_profile_personal_details',
+        ),
+        headers: {
+          'Accept': 'application/json',
+        },
+        body: {
+          'empid': _empid,
+          'gender': details['gender']!,
+          'agama': details['agama']!,
+          'golongan_darah': details['golongan_darah']!,
+          'status_kawin': details['status_kawin']!,
+          'address': details['address']!,
+        },
+      ).timeout(const Duration(seconds: 20));
+
+      Map<String, dynamic>? json;
+
+      try {
+        json = jsonDecode(response.body) as Map<String, dynamic>;
+      } catch (_) {
+        json = null;
+      }
+
+      if (!mounted) return;
+
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300 &&
+          json?['success'] == true) {
+        final rawData = json?['data'];
+
+        final savedData = rawData is Map
+            ? Map<String, dynamic>.from(rawData)
+            : <String, dynamic>{};
+
+        setState(() {
+          _personal ??= <String, dynamic>{};
+
+          _personal!['gender'] = savedData['gender'] ?? details['gender'];
+
+          _personal!['agama'] = savedData['agama'] ?? details['agama'];
+
+          _personal!['golongan_darah'] =
+              savedData['golongan_darah'] ?? details['golongan_darah'];
+
+          _personal!['status_kawin'] =
+              savedData['status_kawin'] ?? details['status_kawin'];
+
+          _personal!['address'] = savedData['address'] ?? details['address'];
+        });
+
+        _showSnack(
+          'Personal details berhasil diperbarui.',
+          success: true,
+        );
+      } else {
+        _showSnack(
+          json?['message']?.toString() ?? 'Gagal memperbarui personal details.',
+        );
+      }
+    } catch (e, st) {
+      debugPrint(
+        '[Profile] update personal details error: $e\n$st',
+      );
+
+      if (mounted) {
+        _showSnack(
+          'Tidak dapat memperbarui personal details.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingPersonalDetails = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveProfilePhone(String phone) async {
+    if (_savingPhone) return;
+
+    setState(() {
+      _savingPhone = true;
+    });
+
+    try {
+      final response = await http.post(
+        Uri.parse(
+          '$_kBaseUrl/api/update_profile_phone',
+        ),
+        headers: {
+          'Accept': 'application/json',
+        },
+        body: {
+          'empid': _empid,
+          'telp': phone,
+        },
+      ).timeout(const Duration(seconds: 20));
+
+      Map<String, dynamic>? json;
+
+      try {
+        json = jsonDecode(response.body) as Map<String, dynamic>;
+      } catch (_) {
+        json = null;
+      }
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200 && json?['success'] == true) {
+        final data = json?['data'];
+
+        final savedPhone =
+            data is Map ? data['telp']?.toString() ?? phone : phone;
+
+        setState(() {
+          _personal ??= <String, dynamic>{};
+          _personal!['telp'] = savedPhone;
+        });
+
+        _showSnack(
+          'Nomor telepon berhasil diperbarui.',
+          success: true,
+        );
+      } else {
+        _showSnack(
+          json?['message']?.toString() ?? 'Gagal memperbarui nomor telepon.',
+        );
+      }
+    } catch (e, st) {
+      debugPrint('[Profile] update phone error: $e\n$st');
+
+      if (mounted) {
+        _showSnack(
+          'Tidak dapat memperbarui nomor telepon.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingPhone = false;
+        });
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -567,9 +1614,10 @@ class _ProfilePageState extends State<ProfilePage>
                   _InfoRow(
                     icon: Icons.phone_rounded,
                     label: 'Telephone',
-                    value: _telp,
+                    value: _savingPhone ? 'Menyimpan...' : _telp,
                     color: _accent,
                     isLast: true,
+                    onEdit: _savingPhone ? null : _showEditPhoneDialog,
                   ),
                 ],
               ),
@@ -649,6 +1697,8 @@ class _ProfilePageState extends State<ProfilePage>
                 title: 'Personal Details',
                 icon: Icons.person_rounded,
                 iconColor: _warning,
+                onEdit: _showEditPersonalDetailsDialog,
+                isSaving: _savingPersonalDetails,
                 children: [
                   _InfoRow(
                     icon: Icons.wc_rounded,
@@ -1247,11 +2297,15 @@ class _SectionCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final List<Widget> children;
+  final VoidCallback? onEdit;
+  final bool isSaving;
   const _SectionCard({
     required this.title,
     required this.icon,
     required this.iconColor,
     required this.children,
+    this.onEdit,
+    this.isSaving = false,
   });
 
   @override
@@ -1285,12 +2339,51 @@ class _SectionCard extends StatelessWidget {
                   child: Icon(icon, color: iconColor, size: 16),
                 ),
                 const SizedBox(width: 10),
-                Text(title,
+                Expanded(
+                  child: Text(
+                    title,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.2,
-                    )),
+                    ),
+                  ),
+                ),
+                if (isSaving)
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F3F8),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: _ProfilePageState._navy,
+                        ),
+                      ),
+                    ),
+                  )
+                else if (onEdit != null)
+                  IconButton(
+                    onPressed: onEdit,
+                    tooltip: 'Edit $title',
+                    icon: const Icon(
+                      Icons.edit_rounded,
+                      size: 18,
+                      color: _ProfilePageState._navy,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFFF0F3F8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1308,12 +2401,14 @@ class _InfoRow extends StatelessWidget {
   final String label, value;
   final Color color;
   final bool isLast;
+  final VoidCallback? onEdit;
   const _InfoRow({
     required this.icon,
     required this.label,
     required this.value,
     required this.color,
     this.isLast = false,
+    this.onEdit,
   });
 
   @override
@@ -1359,6 +2454,17 @@ class _InfoRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
+              if (onEdit != null) ...[
+                GestureDetector(
+                  onTap: onEdit,
+                  child: Icon(
+                    Icons.edit_rounded,
+                    size: 15,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(width: 10)
+              ],
               GestureDetector(
                 onTap: () {
                   Clipboard.setData(ClipboardData(text: value));
@@ -1491,8 +2597,7 @@ class _LogoutButtonState extends State<_LogoutButton> {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  )),
+                    color: Colors.white)),
             ],
           ),
         ),

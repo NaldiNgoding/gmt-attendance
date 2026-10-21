@@ -278,10 +278,12 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
 
   Widget _buildNavigationRow() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _buildNavButton(Icons.chevron_left, _goToPreviousMonth),
+        const SizedBox(width: 8),
         _buildPeriodSelector(),
+        const SizedBox(width: 8),
         _buildNavButton(Icons.chevron_right, _goToNextMonth),
       ],
     );
@@ -289,25 +291,21 @@ class _AttendanceLogScreenState extends State<AttendanceLogScreen> {
 
   Widget _buildNavButton(IconData icon, VoidCallback onTap) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.95),
-      borderRadius: BorderRadius.circular(20),
+      color: Colors.white.withOpacity(0.22),
+      shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white, width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: Center(
+            child: Icon(
+              icon,
+              color: Colors.white,
+              size: 20,
+            ),
           ),
-          child: Icon(icon, color: primaryColor, size: 18),
         ),
       ),
     );
