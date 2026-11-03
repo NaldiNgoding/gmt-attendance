@@ -86,6 +86,11 @@ class _TimeOffPageState extends State<TimeOffPage> {
   String? _historyError;
 
   // ============================================================
+  // STATE — Cancel Time-Off
+  // ============================================================
+  String? _cancellingTimeOffId;
+
+  // ============================================================
   // DETAIL APPROVAL CUTI
   // ============================================================
   final Set<String> _expandedHistoryIds = {};
@@ -383,6 +388,24 @@ class _TimeOffPageState extends State<TimeOffPage> {
     }
   }
 
+  List<Map<String, dynamic>> get _availableTimeOffTypes {
+    if (_remainingBalance >= 0) {
+      return _timeOffTypes;
+    }
+
+    return _timeOffTypes.where((item) {
+      final name = (item['timeoffname'] ?? '')
+          .toString()
+          .toLowerCase()
+          .replaceAll('/ti', '')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+
+      return name != 'cuti karyawan tahunan' &&
+          name != 'cuti management tahunan';
+    }).toList();
+  }
+
   // ============================================================
   // API — SUBMIT TIME-OFF
   // ============================================================
@@ -458,6 +481,94 @@ class _TimeOffPageState extends State<TimeOffPage> {
     } catch (e) {
       setSheetState(() => _isSubmittingTimeOff = false);
       _snack('Gagal mengajukan Time-Off: $e');
+    }
+  }
+
+  Future<void> _confirmCancelTimeOff(Map<String, dynamic> item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Batalkan Pengajuan?'),
+          content: const Text(
+            'Apakah kamu yakin ingin membatalkan pengajuan Time-Off ini?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, false);
+              },
+              child: const Text('Kembali'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Ya, Batalkan'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && mounted) {
+      await _cancelTimeOff(item);
+    }
+  }
+
+  Future<void> _cancelTimeOff(Map<String, dynamic> item) async {
+    final requestId = (item['id'] ?? item['timeoff_id'] ?? '').toString();
+
+    if (requestId.isEmpty) {
+      _snack('ID pengajuan tidak ditemukan.');
+      return;
+    }
+
+    setState(() {
+      _cancellingTimeOffId = requestId;
+    });
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/cancel-timeoff'),
+        headers: const {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'id': item['id'] ?? item['timeoff_id'],
+        }),
+      );
+
+      final decoded = jsonDecode(response.body);
+
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300 &&
+          decoded['success'] == true) {
+        await _loadHistory();
+
+        if (!mounted) return;
+
+        _snack('Time-Off berhasil dibatalkan.');
+      } else {
+        throw Exception(
+          decoded['message'] ?? 'Gagal membatalkan Time-Off.',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      _snack('Gagal membatalkan Time-Off: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _cancellingTimeOffId = null;
+        });
+      }
     }
   }
 
@@ -1014,6 +1125,23 @@ class _TimeOffPageState extends State<TimeOffPage> {
       return levelA.compareTo(levelB);
     });
 
+    // Cek apakah pengajuan masih menunggu approval.
+    final isWaitingApproval = status.trim().toLowerCase() == 'waiting approval';
+
+    // Cek apakah sudah ada approver yang melakukan tindakan.
+    final hasApprovalAction = approvals.any((approval) {
+      final approvalStatus =
+          (approval['status'] ?? '').toString().toLowerCase().trim();
+
+      return approvalStatus == 'approved' || approvalStatus == 'rejected';
+    });
+
+    // Rules untuk menentukan apakah pengajuan bisa dibatalkan.
+    final canCancel = isWaitingApproval && !hasApprovalAction;
+
+    // Cek apakah pengajuan ini sedang diproses pembatalannya.
+    final isCancelling = _cancellingTimeOffId == requestId;
+
     final isExpanded =
         requestId.isNotEmpty && _expandedHistoryIds.contains(requestId);
 
@@ -1117,6 +1245,52 @@ class _TimeOffPageState extends State<TimeOffPage> {
                 ? _buildApprovalTimeline(approvals)
                 : const SizedBox.shrink(),
           ),
+          if (canCancel)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed:
+                      isCancelling ? null : () => _confirmCancelTimeOff(item),
+                  icon: isCancelling
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.red,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.close_rounded,
+                          size: 14,
+                        ),
+                  label: Text(
+                    isCancelling ? 'Membatalkan...' : 'Batalkan Pengajuan',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade600,
+                    foregroundColor: Colors.white,
+                    side: BorderSide(color: Colors.red.shade600),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    minimumSize: const Size(0, 34),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1536,6 +1710,7 @@ class _TimeOffPageState extends State<TimeOffPage> {
   // ============================================================
 
   Widget _buildTimeOffTypeField(StateSetter setSheetState) {
+    final availableTypes = _availableTimeOffTypes;
     if (_isLoadingTimeOffTypes) {
       return _fieldWrapper(
         child: const Center(
@@ -1571,7 +1746,7 @@ class _TimeOffPageState extends State<TimeOffPage> {
       );
     }
 
-    if (_timeOffTypes.isEmpty) {
+    if (availableTypes.isEmpty) {
       return _fieldWrapper(
         alignment: Alignment.centerLeft,
         child: Text(
@@ -1595,7 +1770,7 @@ class _TimeOffPageState extends State<TimeOffPage> {
             size: 17,
             color: Colors.grey,
           ),
-          items: _timeOffTypes.map((item) {
+          items: availableTypes.map((item) {
             return DropdownMenuItem<Map<String, dynamic>>(
               value: item,
               child: Text(
