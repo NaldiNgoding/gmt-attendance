@@ -564,156 +564,164 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
         ),
       ),
       child: DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.88,
-        minChildSize: 0.55,
-        maxChildSize: 0.95,
-        builder: (context, scrollController) {
-          return Column(
-            children: [
-              // ==========================================================
-              // DRAG HANDLE
-              // ==========================================================
-              Padding(
-                padding: const EdgeInsets.only(
-                  top: 10,
-                  bottom: 4,
-                ),
-                child: Container(
-                  width: 42,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: _AppColors.textMuted.withOpacity(0.30),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-
-              // ==========================================================
-              // HEADER
-              // ==========================================================
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  20,
-                  8,
-                  12,
-                  12,
-                ),
-                child: Row(
-                  children: [
-                    Container(
+          expand: false,
+          initialChildSize: 0.88,
+          minChildSize: 0.55,
+          maxChildSize: 0.95,
+          builder: (context, scrollController) {
+            return StatefulBuilder(builder: (context, setModalState) {
+              return Column(
+                children: [
+                  // ==========================================================
+                  // DRAG HANDLE
+                  // ==========================================================
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      top: 10,
+                      bottom: 4,
+                    ),
+                    child: Container(
                       width: 42,
-                      height: 42,
+                      height: 5,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            _AppColors.royalNavy,
-                            _AppColors.royalNavyDark,
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(13),
-                      ),
-                      child: const Icon(
-                        Icons.more_time_rounded,
-                        color: Colors.white,
-                        size: 22,
+                        color: _AppColors.textMuted.withOpacity(0.30),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Ajukan Lembur',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: _AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () {
-                        _resetFormState();
-                        Navigator.pop(context);
-                      },
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        color: _AppColors.textSecondary,
-                      ),
-                      tooltip: 'Tutup',
-                    ),
-                  ],
-                ),
-              ),
-
-              const Divider(
-                height: 1,
-                color: _AppColors.divider,
-              ),
-
-              // ==========================================================
-              // FORM CONTENT
-              // ==========================================================
-              Expanded(
-                child: SingleChildScrollView(
-                  controller: scrollController,
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    16,
-                    16,
-                    MediaQuery.of(context).viewInsets.bottom + 24,
                   ),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+
+                  // ==========================================================
+                  // HEADER
+                  // ==========================================================
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      20,
+                      8,
+                      12,
+                      12,
+                    ),
+                    child: Row(
                       children: [
-                        _buildDateSelector(),
-                        const SizedBox(height: 16),
-                        _buildAttendanceStatus(),
-                        const SizedBox(height: 16),
-                        _buildOvertimeTypeSelector(),
-                        const SizedBox(height: 16),
-                        if (_selectedOvertimeType == OvertimeType.beforeWork)
-                          _buildOvertimeDurationCard(
-                            type: OvertimeType.beforeWork,
-                            durationHourController: _ovtBeforeHourController,
-                            durationMinuteController:
-                                _ovtBeforeMinuteController,
-                            breakHourController: _brkBeforeHourController,
-                            breakMinuteController: _brkBeforeMinuteController,
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                _AppColors.royalNavy,
+                                _AppColors.royalNavyDark,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(13),
                           ),
-                        if (_selectedOvertimeType == OvertimeType.afterWork)
-                          _buildOvertimeDurationCard(
-                            type: OvertimeType.afterWork,
-                            durationHourController: _ovtAfterHourController,
-                            durationMinuteController: _ovtAfterMinuteController,
-                            breakHourController: _brkAfterHourController,
-                            breakMinuteController: _brkAfterMinuteController,
+                          child: const Icon(
+                            Icons.more_time_rounded,
+                            color: Colors.white,
+                            size: 22,
                           ),
-                        if (_selectedOvertimeType != null) ...[
-                          const SizedBox(height: 16),
-                          _buildReasonField(),
-                          const SizedBox(height: 16),
-                          _buildFileUploadSection(),
-                          const SizedBox(height: 16),
-                          _buildNoteField(),
-                        ],
-                        const SizedBox(height: 28),
-                        _buildSubmitButton(),
-                        const SizedBox(height: 8),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Ajukan Lembur',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: _AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () {
+                            _resetFormState();
+                            Navigator.pop(context);
+                          },
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: _AppColors.textSecondary,
+                          ),
+                          tooltip: 'Tutup',
+                        ),
                       ],
                     ),
                   ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+
+                  const Divider(
+                    height: 1,
+                    color: _AppColors.divider,
+                  ),
+
+                  // ==========================================================
+                  // FORM CONTENT
+                  // ==========================================================
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        16,
+                        16,
+                        MediaQuery.of(context).viewInsets.bottom + 24,
+                      ),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildDateSelector(
+                              setModalState: setModalState,
+                            ),
+                            const SizedBox(height: 16),
+                            _buildAttendanceStatus(),
+                            const SizedBox(height: 16),
+                            _buildOvertimeTypeSelector(),
+                            const SizedBox(height: 16),
+                            if (_selectedOvertimeType ==
+                                OvertimeType.beforeWork)
+                              _buildOvertimeDurationCard(
+                                type: OvertimeType.beforeWork,
+                                durationHourController:
+                                    _ovtBeforeHourController,
+                                durationMinuteController:
+                                    _ovtBeforeMinuteController,
+                                breakHourController: _brkBeforeHourController,
+                                breakMinuteController:
+                                    _brkBeforeMinuteController,
+                              ),
+                            if (_selectedOvertimeType == OvertimeType.afterWork)
+                              _buildOvertimeDurationCard(
+                                type: OvertimeType.afterWork,
+                                durationHourController: _ovtAfterHourController,
+                                durationMinuteController:
+                                    _ovtAfterMinuteController,
+                                breakHourController: _brkAfterHourController,
+                                breakMinuteController:
+                                    _brkAfterMinuteController,
+                              ),
+                            if (_selectedOvertimeType != null) ...[
+                              const SizedBox(height: 16),
+                              _buildReasonField(),
+                              const SizedBox(height: 16),
+                              _buildFileUploadSection(),
+                              const SizedBox(height: 16),
+                              _buildNoteField(),
+                            ],
+                            const SizedBox(height: 28),
+                            _buildSubmitButton(),
+                            const SizedBox(height: 8),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            });
+          }),
     );
   }
 
@@ -1720,13 +1728,17 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
     );
   }
 
-  Widget _buildDateSelector() {
+  Widget _buildDateSelector({
+    required StateSetter setModalState,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionLabel('TANGGAL LEMBUR'),
         GestureDetector(
-          onTap: _selectDate,
+          onTap: () => _selectDate(
+            setModalState: setModalState,
+          ),
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(

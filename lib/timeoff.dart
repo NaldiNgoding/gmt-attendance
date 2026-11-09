@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'transcuti.dart';
 import 'dart:io'; // untuk File(path).readAsBytes()
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 // ============================================================
 // PAGE
 // ============================================================
@@ -89,6 +90,12 @@ class _TimeOffPageState extends State<TimeOffPage> {
   // STATE — Cancel Time-Off
   // ============================================================
   String? _cancellingTimeOffId;
+  final Map<String, Future<List<String>>> _timeOffAttachmentNamesCache = {};
+
+  // ============================================================
+  // PREVIEW ATTACHMENT
+  // ============================================================
+  bool _isLoadingAttachmentPreview = false;
 
   // ============================================================
   // DETAIL APPROVAL CUTI
@@ -484,6 +491,462 @@ class _TimeOffPageState extends State<TimeOffPage> {
     }
   }
 
+  Future<void> _showAttachmentPreview(String requestId) async {
+    if (_isLoadingAttachmentPreview) return;
+
+    setState(() {
+      _isLoadingAttachmentPreview = true;
+    });
+
+    try {
+      // 1. Ambil daftar filename dari cache/API
+      final filenames =
+          (await _getTimeOffAttachmentFilenames(requestId)).toSet().toList();
+
+      if (filenames.isEmpty) {
+        _snack('Pengajuan ini tidak memiliki attachment.');
+        return;
+      }
+
+      // 2. Ambil isi setiap file
+      final attachments = <Map<String, dynamic>>[];
+
+      for (final filename in filenames) {
+        final fileUri = Uri.parse(
+          '$baseUrl/new_gettimeoffattachmentfile',
+        ).replace(
+          queryParameters: {
+            'filename': filename,
+          },
+        );
+
+        final fileResponse = await http.get(
+          fileUri,
+          headers: const {
+            'Accept': 'application/json',
+          },
+        );
+
+        if (fileResponse.statusCode != 200) {
+          continue;
+        }
+
+        final fileDecoded = jsonDecode(fileResponse.body);
+
+        if (fileDecoded is! Map || fileDecoded['success'] != true) {
+          continue;
+        }
+
+        final base64Data = fileDecoded['data']?.toString() ?? '';
+
+        if (base64Data.isEmpty) continue;
+
+        final extension = filename.split('.').last.toLowerCase();
+
+        attachments.add({
+          'filename': filename,
+          'extension': extension,
+          'bytes': base64Decode(
+            base64Data.replaceAll(RegExp(r'\s'), ''),
+          ),
+        });
+      }
+
+      if (attachments.isEmpty) {
+        throw Exception('Tidak ada file attachment yang dapat dibuka.');
+      }
+
+      if (!mounted) return;
+
+      // 3. Tampilkan popup
+      await _showAttachmentPreviewDialog(attachments);
+    } catch (e) {
+      if (!mounted) return;
+
+      _snack('Gagal membuka attachment: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingAttachmentPreview = false;
+        });
+      }
+    }
+  }
+
+  Future<List<String>> _getTimeOffAttachmentFilenames(
+    String requestId,
+  ) {
+    return _timeOffAttachmentNamesCache.putIfAbsent(
+      requestId,
+      () async {
+        final uri = Uri.parse(
+          '$baseUrl/new_gettimeoffattachment',
+        ).replace(
+          queryParameters: {
+            'id': requestId,
+          },
+        );
+
+        final response = await http.get(
+          uri,
+          headers: const {
+            'Accept': 'application/json',
+          },
+        );
+
+        if (response.statusCode != 200) {
+          throw Exception('HTTP ${response.statusCode}');
+        }
+
+        final decoded = jsonDecode(response.body);
+
+        if (decoded is! Map || decoded['success'] != true) {
+          throw Exception('Gagal mengambil daftar attachment.');
+        }
+
+        final rawData = decoded['data'];
+
+        final records = rawData is List
+            ? rawData.whereType<Map>().toList()
+            : rawData is Map
+                ? [rawData]
+                : [];
+
+        final filenames = <String>[];
+
+        for (int i = 0; i < records.length; i++) {
+          final record = records[i];
+          if (record['isactive'] != null &&
+              record['isactive'].toString() != '1') {
+            continue;
+          }
+
+          for (final field in [
+            'attachment1',
+            'attachment2',
+            'attachment3',
+          ]) {
+            final filename = record[field]?.toString().trim() ?? '';
+            if (filename.isNotEmpty && filename.toLowerCase() != 'null') {
+              filenames.add(filename);
+            }
+          }
+        }
+        final uniqueFilenames = filenames.toSet().toList();
+        return uniqueFilenames;
+      },
+    );
+  }
+
+  Future<void> _showAttachmentPreviewDialog(
+    List<Map<String, dynamic>> attachments,
+  ) async {
+    final pageController = PageController();
+    int currentPage = 0;
+
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (dialogContext, setDialogState) {
+              final currentFile = attachments[currentPage];
+
+              return Dialog(
+                backgroundColor: Colors.white,
+                insetPadding: const EdgeInsets.all(16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: SizedBox(
+                  height: MediaQuery.of(dialogContext).size.height * 0.72,
+                  child: Column(
+                    children: [
+                      // HEADER
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: const BoxDecoration(
+                          color: kNavy,
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.attach_file_rounded,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Text(
+                                'Preview Attachment',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.pop(dialogContext),
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // PREVIEW FILE
+                      Expanded(
+                        child: PageView.builder(
+                          controller: pageController,
+                          itemCount: attachments.length,
+                          onPageChanged: (index) {
+                            setDialogState(() {
+                              currentPage = index;
+                            });
+                          },
+                          itemBuilder: (context, index) {
+                            final file = attachments[index];
+                            final extension = file['extension'];
+                            final bytes = file['bytes'];
+
+                            if (['jpg', 'jpeg', 'png'].contains(extension)) {
+                              return Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: InteractiveViewer(
+                                  minScale: 0.8,
+                                  maxScale: 4,
+                                  child: Center(
+                                    child: Image.memory(
+                                      bytes,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+
+                            if (extension == 'pdf') {
+                              return SfPdfViewer.memory(bytes);
+                            }
+
+                            return const Center(
+                              child: Text(
+                                'Format file tidak didukung.',
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+
+                      // FILE NAME
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                        ),
+                        child: Text(
+                          currentFile['filename'],
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+
+                      // PAGE NAVIGATION
+                      if (attachments.length > 1)
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            top: 4,
+                            bottom: 8,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              IconButton(
+                                onPressed: currentPage > 0
+                                    ? () => pageController.previousPage(
+                                          duration: const Duration(
+                                            milliseconds: 250,
+                                          ),
+                                          curve: Curves.easeInOut,
+                                        )
+                                    : null,
+                                icon: const Icon(
+                                  Icons.chevron_left_rounded,
+                                ),
+                                color: kNavy,
+                              ),
+                              Text(
+                                '${currentPage + 1} / ${attachments.length}',
+                                style: const TextStyle(
+                                  color: kNavy,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: currentPage < attachments.length - 1
+                                    ? () => pageController.nextPage(
+                                          duration: const Duration(
+                                            milliseconds: 250,
+                                          ),
+                                          curve: Curves.easeInOut,
+                                        )
+                                    : null,
+                                icon: const Icon(
+                                  Icons.chevron_right_rounded,
+                                ),
+                                color: kNavy,
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      pageController.dispose();
+    }
+  }
+
+  Future<void> _confirmRequestCancelDinas(
+    Map<String, dynamic> item,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Pembatalan Perjalanan Dinas'),
+          content: const Text(
+            'Apakah kamu yakin ingin mengajukan '
+            'Pembatalan Perjalanan Dinas? '
+            'Permintaan ini akan dibuat sebagai pengajuan baru '
+            'dan memerlukan approval.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Kembali'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Ya, Lanjutkan'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && mounted) {
+      await _requestCancelDinas(item);
+    }
+  }
+
+  Future<void> _requestCancelDinas(
+    Map<String, dynamic> item,
+  ) async {
+    final requestId = (item['id'] ?? '').toString();
+
+    if (requestId.isEmpty || _employeeId.isEmpty) {
+      _snack('Data pengajuan tidak ditemukan.');
+      return;
+    }
+
+    final startDate = DateTime.tryParse(
+      (item['date_start'] ?? '').toString(),
+    );
+
+    final endDate = DateTime.tryParse(
+      (item['date_end'] ?? '').toString(),
+    );
+
+    if (startDate == null || endDate == null) {
+      _snack('Tanggal Perjalanan Dinas tidak valid.');
+      return;
+    }
+
+    setState(() {
+      _cancellingTimeOffId = requestId;
+    });
+
+    try {
+      final now = DateTime.now();
+
+      final body = {
+        'empid': _employeeId,
+        'datestart': _formatApiDate(startDate),
+        'dateend': _formatApiDate(endDate),
+
+        // ID Time-Off asal yang ingin dibatalkan.
+        'reason': requestId,
+
+        'createdby': 'SYSTEM',
+        'createddate': _formatApiDate(now),
+      };
+
+      debugPrint('REQUEST CANCEL DINAS BODY: $body');
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/request-cancel-dinas'),
+        headers: const {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(body),
+      );
+
+      debugPrint('REQUEST CANCEL DINAS STATUS: ${response.statusCode}');
+      debugPrint('REQUEST CANCEL DINAS RESPONSE: ${response.body}');
+
+      final decoded = jsonDecode(response.body);
+
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300 &&
+          decoded['success'] == true) {
+        await _loadHistory();
+
+        if (!mounted) return;
+
+        _snack(
+          'Request Pembatalan Perjalanan Dinas berhasil dibuat.',
+        );
+      } else {
+        throw Exception(
+          decoded['message'] ?? 'Gagal mengajukan Pembatalan Perjalanan Dinas.',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      _snack('Gagal mengajukan pembatalan: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _cancellingTimeOffId = null;
+        });
+      }
+    }
+  }
+
   Future<void> _confirmCancelTimeOff(Map<String, dynamic> item) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -621,7 +1084,6 @@ class _TimeOffPageState extends State<TimeOffPage> {
 
       return base64Encode(bytes);
     } catch (e) {
-      debugPrint('Gagal membaca attachment ${file.name}: $e');
       return null;
     }
   }
@@ -1125,6 +1587,23 @@ class _TimeOffPageState extends State<TimeOffPage> {
       return levelA.compareTo(levelB);
     });
 
+    final normalizedTimeOffName = (item['timeoff_name'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), ' ');
+
+    final isPerjalananDinas = normalizedTimeOffName == 'perjalanan dinas';
+
+    final isApproved = status.trim().toLowerCase() == 'approved';
+
+    // Semua approval yang memiliki approver ID harus Approved.
+    final allApprovalsApproved = approvals.isNotEmpty &&
+        approvals.every((approval) {
+          return (approval['status'] ?? '').toString().trim().toLowerCase() ==
+              'approved';
+        });
+
     // Cek apakah pengajuan masih menunggu approval.
     final isWaitingApproval = status.trim().toLowerCase() == 'waiting approval';
 
@@ -1136,8 +1615,13 @@ class _TimeOffPageState extends State<TimeOffPage> {
       return approvalStatus == 'approved' || approvalStatus == 'rejected';
     });
 
-    // Rules untuk menentukan apakah pengajuan bisa dibatalkan.
-    final canCancel = isWaitingApproval && !hasApprovalAction;
+    // Pembatalan Time-Off biasa.
+    final canCancel =
+        !isPerjalananDinas && isWaitingApproval && !hasApprovalAction;
+
+    // Pembatalan Perjalanan Dinas.
+    final canRequestCancelDinas =
+        isPerjalananDinas && isApproved && allApprovalsApproved;
 
     // Cek apakah pengajuan ini sedang diproses pembatalannya.
     final isCancelling = _cancellingTimeOffId == requestId;
@@ -1217,6 +1701,47 @@ class _TimeOffPageState extends State<TimeOffPage> {
                   ),
                   const SizedBox(height: 8),
                   _buildStatusBadge(status),
+                  if (status.trim().toLowerCase() == 'approved' &&
+                      requestId.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    FutureBuilder<List<String>>(
+                      future: _getTimeOffAttachmentFilenames(requestId),
+                      builder: (context, snapshot) {
+                        final filenames = snapshot.data ?? [];
+                        if (snapshot.connectionState != ConnectionState.done ||
+                            snapshot.hasError ||
+                            filenames.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+                        return InkWell(
+                          onTap: () => _showAttachmentPreview(requestId),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 3),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.attach_file_rounded,
+                                  size: 15,
+                                  color: kNavy,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Preview Attachment (${filenames.length})',
+                                  style: const TextStyle(
+                                    color: kNavy,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                   if (status.trim().toLowerCase() == 'rejected' &&
                       rejectNote.trim().isNotEmpty)
                     _buildRejectNote(rejectNote),
@@ -1245,14 +1770,17 @@ class _TimeOffPageState extends State<TimeOffPage> {
                 ? _buildApprovalTimeline(approvals)
                 : const SizedBox.shrink(),
           ),
-          if (canCancel)
+          if (canCancel || canRequestCancelDinas)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed:
-                      isCancelling ? null : () => _confirmCancelTimeOff(item),
+                  onPressed: isCancelling
+                      ? null
+                      : canRequestCancelDinas
+                          ? () => _confirmRequestCancelDinas(item)
+                          : () => _confirmCancelTimeOff(item),
                   icon: isCancelling
                       ? const SizedBox(
                           width: 16,
@@ -1267,7 +1795,11 @@ class _TimeOffPageState extends State<TimeOffPage> {
                           size: 14,
                         ),
                   label: Text(
-                    isCancelling ? 'Membatalkan...' : 'Batalkan Pengajuan',
+                    isCancelling
+                        ? 'Memproses...'
+                        : canRequestCancelDinas
+                            ? 'Pembatalan Perjalanan Dinas'
+                            : 'Batalkan Pengajuan',
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -2030,7 +2562,6 @@ class _TimeOffPageState extends State<TimeOffPage> {
       if (!mounted) return;
 
       _snack('Gagal memilih file: $e');
-      debugPrint('File picker error: $e');
     }
   }
 }

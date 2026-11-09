@@ -877,23 +877,41 @@ class _AnnouncementPageState extends State<AnnouncementPage> {
     });
   }
 
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      title: const Text(
+        'Announcement',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.2,
+        ),
+      ),
+      centerTitle: true,
+      iconTheme: const IconThemeData(color: Colors.white),
+      foregroundColor: Colors.white,
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0D47A1), Color(0xFF1E88E5)],
+          ),
+        ),
+      ),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+    );
+  }
+
   @override
   Widget build(
     BuildContext context,
   ) {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FA),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0D47A1),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
-          'Announcement',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
+      appBar: _buildAppBar(),
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(
