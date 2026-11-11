@@ -66,6 +66,20 @@ class AttendanceData {
   bool get hasCheckout => checkout != null && checkout!.isNotEmpty;
 }
 
+String _normalizeApprovalStatus(dynamic value) {
+  final status = value?.toString().trim().toLowerCase();
+
+  if (status == '1' || status == 'approved') {
+    return 'Approved';
+  }
+
+  if (status == '2' || status == 'rejected') {
+    return 'Rejected';
+  }
+
+  return 'Pending';
+}
+
 class OvertimeHistory {
   final String id;
   final String status;
@@ -133,10 +147,10 @@ class OvertimeHistory {
       namaApp2: json['nama_app2'],
       namaApp3: json['nama_app3'],
       namaApp4: json['nama_app4'],
-      approve1: json['approve1'],
-      approve2: json['approve2'],
-      approve3: json['approve3'],
-      approve4: json['approve4'],
+      approve1: _normalizeApprovalStatus(json['approve1']),
+      approve2: _normalizeApprovalStatus(json['approve2']),
+      approve3: _normalizeApprovalStatus(json['approve3']),
+      approve4: _normalizeApprovalStatus(json['approve4']),
       approve1time: json['approve1time'],
       approve2time: json['approve2time'],
       approve3time: json['approve3time'],
@@ -146,12 +160,13 @@ class OvertimeHistory {
   }
 
   String get statusDisplay {
-    switch (status) {
-      case 'Pending':
+    switch (status.trim().toLowerCase()) {
+      case 'pending':
+      case 'waiting approval':
         return 'Menunggu Approval';
-      case 'Approved':
+      case 'approved':
         return 'Disetujui';
-      case 'Rejected':
+      case 'rejected':
         return 'Ditolak';
       default:
         return status;
@@ -159,12 +174,13 @@ class OvertimeHistory {
   }
 
   Color get statusColor {
-    switch (status) {
-      case 'Pending':
+    switch (status.trim().toLowerCase()) {
+      case 'pending':
+      case 'waiting approval':
         return Colors.orange;
-      case 'Approved':
+      case 'approved':
         return Colors.green;
-      case 'Rejected':
+      case 'rejected':
         return Colors.red;
       default:
         return Colors.grey;
@@ -172,17 +188,19 @@ class OvertimeHistory {
   }
 
   IconData get statusIcon {
-    switch (status) {
-      case 'Pending':
+    switch (status.trim().toLowerCase()) {
+      case 'pending':
+      case 'waiting approval':
         return Icons.hourglass_empty_rounded;
-      case 'Approved':
+      case 'approved':
         return Icons.check_circle_rounded;
-      case 'Rejected':
+      case 'rejected':
         return Icons.cancel_rounded;
       default:
         return Icons.help_outline_rounded;
     }
   }
+
 }
 
 class OvertimeRequest {
@@ -446,13 +464,13 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
   bool _isLoadingHistory = true;
   int _selectedMonth = DateTime.now().month;
   int _selectedYear = DateTime.now().year;
+  final Set<String> _expandedOvertimeIds = {};
 
   // Form state
   final _formKey = GlobalKey<FormState>();
   DateTime _selectedDate = DateTime.now();
   String _reason = '';
   AttendanceData? _selectedAttendance;
-  List<AttendanceData> _attendanceList = [];
   bool _isLoadingAttendance = false;
   bool _isSubmitting = false;
   bool _isLocaleInitialized = false;
@@ -774,14 +792,12 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
       if (!mounted) return;
 
       setState(() {
-        _attendanceList = attendanceList;
         _selectedAttendance = selectedAttendance;
       });
     } catch (e) {
       if (!mounted) return;
 
       setState(() {
-        _attendanceList = [];
         _selectedAttendance = null;
         _selectedOvertimeType = null;
       });
@@ -1161,31 +1177,7 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
     );
   }
 
-  String _getStatusText(String status) {
-    switch (status) {
-      case 'Pending':
-        return 'Menunggu Approval';
-      case 'Approved':
-        return 'Disetujui';
-      case 'Rejected':
-        return 'Ditolak';
-      default:
-        return status;
-    }
-  }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Pending':
-        return Colors.orange;
-      case 'Approved':
-        return Colors.green;
-      case 'Rejected':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
 
   // ============ BUILD ============
   @override
@@ -1398,104 +1390,14 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
                             ],
                           ),
                         )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                           itemCount: _historyList.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 10),
                           itemBuilder: (context, index) {
-                            final item = _historyList[index];
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              decoration: BoxDecoration(
-                                color: _AppColors.card,
-                                borderRadius: BorderRadius.circular(16),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: ExpansionTile(
-                                leading: Container(
-                                  width: 44,
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    color: _getStatusColor(item.status)
-                                        .withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(
-                                    item.statusIcon,
-                                    color: _getStatusColor(item.status),
-                                    size: 24,
-                                  ),
-                                ),
-                                title: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        DateFormat('dd MMMM yyyy', 'id_ID')
-                                            .format(item.date),
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w600),
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: _getStatusColor(item.status)
-                                            .withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        _getStatusText(item.status),
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: _getStatusColor(item.status),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                subtitle: Text(item.reason,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.all(16),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        _buildInfoRow(
-                                            'Tanggal',
-                                            DateFormat('EEEE, d MMMM yyyy',
-                                                    'id_ID')
-                                                .format(item.date)),
-                                        const SizedBox(height: 8),
-                                        _buildInfoRow('Shift', item.shift),
-                                        const SizedBox(height: 8),
-                                        _buildInfoRow('Jam Kerja',
-                                            '${_formatTime(item.schedulein)} - ${_formatTime(item.scheduleout)}'),
-                                        const SizedBox(height: 8),
-                                        _buildInfoRow('Check In/Out',
-                                            '${_formatTime(item.checkin)} / ${_formatTime(item.checkout)}'),
-                                        const SizedBox(height: 8),
-                                        _buildInfoRow('Alasan', item.reason),
-                                        if (item.status == 'Approved') ...[
-                                          const SizedBox(height: 8),
-                                          const Divider(),
-                                          const SizedBox(height: 8),
-                                          _buildApprovalStatus(item),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
+                            return _buildOvertimeHistoryItem(
+                              _historyList[index],
                             );
                           },
                         ),
@@ -1503,6 +1405,243 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildOvertimeHistoryItem(OvertimeHistory item) {
+    final isExpanded = _expandedOvertimeIds.contains(item.id);
+    final statusColor = item.statusColor;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // HEADER CARD
+          InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () {
+              setState(() {
+                if (isExpanded) {
+                  _expandedOvertimeIds.remove(item.id);
+                } else {
+                  _expandedOvertimeIds.add(item.id);
+                }
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      item.statusIcon,
+                      color: statusColor,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // DATE + STATUS
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                DateFormat(
+                                  'dd MMMM yyyy',
+                                  'id_ID',
+                                ).format(item.date),
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: _AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withOpacity(0.10),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                item.statusDisplay,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: statusColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 7),
+
+                        Text(
+                          item.reason.isEmpty ? '-' : item.reason,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: _AppColors.textPrimary,
+                            height: 1.4,
+                          ),
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // QUICK INFORMATION
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _buildOvertimeMetaChip(
+                              Icons.work_outline_rounded,
+                              'Shift ${item.shift.isEmpty ? '-' : item.shift}',
+                            ),
+                            _buildOvertimeMetaChip(
+                              Icons.login_rounded,
+                              'In ${_formatTime(item.checkin)}',
+                            ),
+                            _buildOvertimeMetaChip(
+                              Icons.logout_rounded,
+                              'Out ${_formatTime(item.checkout)}',
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 9),
+
+                        Text(
+                          isExpanded
+                              ? 'Sembunyikan detail'
+                              : 'Tekan untuk melihat detail',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: _AppColors.textSecondary.withOpacity(0.8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  AnimatedRotation(
+                    turns: isExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 250),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: _AppColors.royalNavyDark,
+                      size: 25,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // EXPANDED DETAIL
+          AnimatedSize(
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeInOutCubic,
+            alignment: Alignment.topCenter,
+            child: isExpanded
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Divider(height: 20),
+                        _buildInfoRow(
+                          'Tanggal',
+                          DateFormat(
+                            'EEEE, d MMMM yyyy',
+                            'id_ID',
+                          ).format(item.date),
+                        ),
+                        const SizedBox(height: 9),
+                        _buildInfoRow('Shift', item.shift),
+                        const SizedBox(height: 9),
+                        _buildInfoRow(
+                          'Jam Kerja',
+                          '${_formatTime(item.schedulein)} - '
+                              '${_formatTime(item.scheduleout)}',
+                        ),
+                        const SizedBox(height: 9),
+                        _buildInfoRow(
+                          'Check In/Out',
+                          '${_formatTime(item.checkin)} / '
+                              '${_formatTime(item.checkout)}',
+                        ),
+                        const SizedBox(height: 9),
+                        _buildInfoRow('Alasan', item.reason),
+                        const Divider(height: 28),
+                        _buildApprovalStatus(item),
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOvertimeMetaChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 5,
+      ),
+      decoration: BoxDecoration(
+        color: _AppColors.surface,
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 13,
+            color: _AppColors.royalNavyDark,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: _AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1555,10 +1694,20 @@ class _OvertimeSubmissionPageState extends State<OvertimeSubmissionPage>
 
   Widget _buildApprovalRow(
       String level, String nama, String? status, String? time) {
-    Color statusColor =
-        status == 'Approved' ? _AppColors.success : _AppColors.warning;
-    String statusText = status == 'Approved' ? '✓ Disetujui' : '⏳ Menunggu';
-    if (status == 'Approved' && time != null) {
+    final normalizedStatus = (status ?? 'Pending').toLowerCase();
+    final isApproved = normalizedStatus == 'approved';
+    final isRejected = normalizedStatus == 'rejected';
+    Color statusColor = isApproved
+        ? _AppColors.success
+        : isRejected
+            ? _AppColors.error
+            : _AppColors.warning;
+    String statusText = isApproved
+        ? '✓ Disetujui'
+        : isRejected
+            ? '✕ Ditolak'
+            : '⏳ Menunggu';
+    if (isApproved && time != null && time.isNotEmpty) {
       statusText = '✓ Disetujui ${_formatDateTime(time)}';
     }
     return Padding(
